@@ -5,8 +5,7 @@ POFIX is a modern web application designed to help communities and authorities t
 ## 🚀 Key Features
 
 ### 📷 Smart Reporting with AI Verification
-- **Instant AI Check**: Uses **TensorFlow.js (MobileNet)** running entirely in your browser to verify if an uploaded photo contains road/pothole content.
-- **Privacy-First**: No images are sent to external AI servers for verification.
+- **Instant AI Check**: Uses **TensorFlow.js (MobileNet)** running entirely in the browser to verify if an uploaded photo contains road/pothole content.
 - **Permissive Logic**: Accepts real-world road photos while strictly rejecting invalid content like selfies, food, or documents.
 - **EXIF GPS**: Automatically extracts location data from photos for pinpoint accuracy.
 
@@ -39,7 +38,7 @@ POFIX is a modern web application designed to help communities and authorities t
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/pofix.git
+   git clone https://github.com/SarthC/Pothole-Dealers.git
    ```
 
 2. Install dependencies:
@@ -56,7 +55,7 @@ POFIX is a modern web application designed to help communities and authorities t
 
 ## 📱 How to Use
 
-1. **Report a Pothole**: Click "Report Pothole", take a photo, and let our AI verify it. The location is auto-detected.
+1. **Report a Pothole**: Click "Report Pothole", take a photo, and let our AI verify it. The location is auto-detected or you can manually enter location through fetching through gps or map pin.
 2. **Drive Safe**: Before driving, toggle "Drive Safe Mode". The app will speak to you when hazards are near.
 3. **View Dashboard**: Check the map to see fixed vs. active potholes in your area.
 
@@ -67,7 +66,9 @@ We use a **permissive verification strategy** to handle real-world lighting and 
 - **Ambiguity Handler**: If an image is ambiguous (e.g., close-up dirt) but not explicitly rejected, it is allowed to prevent false negatives.
 
 ## 👥 Team
-Built for the AI Boomi Hackathon 2026.
+Team Name: Pothole Dealers
+Participated as a Solo team 
+Team member: Sarthak Laxman Choudhari
 
 ## 📄 License
 MIT License - see LICENSE file for details.
