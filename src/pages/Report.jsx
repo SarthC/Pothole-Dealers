@@ -121,6 +121,10 @@ function Report() {
                         }))
                         setLocationFromPhoto(true)
                     }
+                } else {
+                    // Fallback: No EXIF GPS found, auto-fetch device location
+                    console.log('📷 No EXIF GPS found. Falling back to Device GPS...')
+                    handleGetLocation()
                 }
             } catch (error) {
                 console.error('Verification error:', error)

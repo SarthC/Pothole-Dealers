@@ -67,8 +67,18 @@ We use a **permissive verification strategy** to handle real-world lighting and 
 
 ## 👥 Team
 Team Name: Pothole Dealers
+
+Team Leader: Sarthak Laxman Choudhari
+
 Participated as a Solo team 
-Team member: Sarthak Laxman Choudhari
+
 
 ## 📄 License
 MIT License - see LICENSE file for details.
+
+## 🔮 Future Roadmap (Phase 2)
+
+- [ ] **Automated Vehicle Integration**: API support for modern vehicles (Tesla/ADAS systems) to use **in-built car cameras** for automatic pothole reporting.
+- [ ] **Automated Dashcam Mode**: Phone mount support to auto-detect and report potholes while driving using real-time video analysis (Zero-Touch Reporting).
+- [ ] **Accelerometer Integration**: Use phone sensors to detect "bumps" and G-force impacts to verify pothole severity automatically.
+- [ ] **Government Portal**: A dedicated admin dashboard for road authorities to manage repairs and dispatch crews.

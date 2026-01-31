@@ -262,11 +262,14 @@ export async function verifyImage(file) {
         aiResult: null
     }
 
-    // Step 1: Extract EXIF data (for GPS only, not blocking)
+    // Step 1: Extract EXIF data
     console.log('🔍 Extracting EXIF data...')
     const exifData = await extractExifData(file)
     result.exifData = exifData
     console.log('📋 EXIF data:', exifData)
+
+    // STRICT CHECK REMOVED: Allow images without EXIF to proceed (fallback to device GPS)
+    // if (!exifData.date && !exifData.gps) { ... }
 
     // Step 2: AI-based content verification
     console.log('🤖 Running AI verification...')
