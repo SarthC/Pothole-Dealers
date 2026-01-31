@@ -67,7 +67,9 @@ We use a **permissive verification strategy** to handle real-world lighting and 
 
 ## 👥 Team
 Team Name: Pothole Dealers
-Participated as a Solo team 
+
+Participated as a Solo team
+
 Team member: Sarthak Laxman Choudhari
 
 ## 📄 License
