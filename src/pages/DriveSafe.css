@@ -1,0 +1,242 @@
+.drivesafe-page {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    background: var(--color-bg-primary);
+}
+
+/* Full-screen Map */
+.drivesafe-map {
+    flex: 1;
+    position: relative;
+}
+
+.drivesafe-map .leaflet-container {
+    height: 100%;
+    width: 100%;
+}
+
+/* User marker with pulse animation */
+.user-marker-pulse {
+    width: 20px;
+    height: 20px;
+    background: #3b82f6;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 15px rgba(59, 130, 246, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    }
+}
+
+/* Control Panel */
+.drivesafe-controls {
+    width: 320px;
+    background: var(--color-bg-secondary);
+    border-left: 1px solid var(--color-border);
+    padding: var(--space-5);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.controls-header h2 {
+    font-size: var(--font-size-xl);
+    margin-bottom: var(--space-1);
+}
+
+.status-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.status-active {
+    color: var(--color-success);
+    font-weight: 600;
+}
+
+.status-inactive {
+    color: var(--color-text-muted);
+}
+
+/* Error Message */
+.error-message {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--color-error);
+    color: var(--color-error);
+    padding: var(--space-3);
+    font-size: var(--font-size-sm);
+}
+
+/* Drive Safe Button */
+.btn-drivesafe {
+    width: 100%;
+    padding: var(--space-4);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-drivesafe.start {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+}
+
+.btn-drivesafe.start:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+}
+
+.btn-drivesafe.stop {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.btn-drivesafe.stop:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+/* Alert History */
+.alert-history {
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    padding: var(--space-4);
+}
+
+.alert-history h4 {
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+}
+
+.alert-history ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.alert-item {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-2);
+    border-left: 3px solid var(--color-border);
+    font-size: var(--font-size-sm);
+}
+
+.alert-item.critical {
+    border-color: #ef4444;
+}
+
+.alert-item.large {
+    border-color: #f97316;
+}
+
+.alert-item.medium {
+    border-color: #eab308;
+}
+
+.alert-item.small {
+    border-color: #22c55e;
+}
+
+.alert-time {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.alert-msg {
+    color: var(--color-text-primary);
+}
+
+/* Legend */
+.legend {
+    margin-top: auto;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+}
+
+.legend h4 {
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    font-size: var(--font-size-sm);
+}
+
+.legend-items .dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+
+.dot.critical {
+    background: #ef4444;
+}
+
+.dot.large {
+    background: #f97316;
+}
+
+.dot.medium {
+    background: #eab308;
+}
+
+.dot.small {
+    background: #22c55e;
+}
+
+.legend-desc {
+    margin-top: var(--space-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .drivesafe-page {
+        flex-direction: column;
+    }
+
+    .drivesafe-map {
+        height: 50vh;
+    }
+
+    .drivesafe-controls {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--color-border);
+    }
+}

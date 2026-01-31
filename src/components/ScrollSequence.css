@@ -1,0 +1,273 @@
+.scroll-sequence {
+    height: 400vh;
+    /* 4x viewport for scroll animation */
+    position: relative;
+}
+
+.scroll-sequence-sticky {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.scroll-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scroll-overlay {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom,
+            rgba(10, 10, 10, 0.3) 0%,
+            rgba(10, 10, 10, 0.6) 50%,
+            rgba(10, 10, 10, 0.8) 100%);
+}
+
+.text-container {
+    position: relative;
+    width: 100%;
+    text-align: center;
+    padding: var(--space-6);
+}
+
+.text-item {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Enter Animation - Slide in from right with increasing opacity */
+.text-item.entering {
+    animation: slideInFromRight 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Exit Animation - Slide out to left with decreasing opacity */
+.text-item.exiting {
+    animation: slideOutToLeft 0.5s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards;
+}
+
+/* Active state (after animation completes) */
+.text-item.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateX(0);
+}
+
+@keyframes slideInFromRight {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) translateX(100px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) translateX(0);
+    }
+}
+
+@keyframes slideOutToLeft {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) translateX(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) translateX(-100px);
+    }
+}
+
+/* Hero Text Styling with Hezba Font */
+.hero-text {
+    font-family: var(--font-family-hero);
+    font-size: var(--font-size-hero);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--color-text-primary);
+    text-transform: uppercase;
+    margin-bottom: var(--space-4);
+    text-shadow: 0 4px 30px rgba(0, 0, 0, 0.7),
+        0 0 60px rgba(212, 168, 83, 0.3);
+}
+
+.hero-subtext {
+    font-family: var(--font-family);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-light);
+    color: var(--color-accent);
+    letter-spacing: var(--letter-spacing-wide);
+    text-transform: uppercase;
+}
+
+.scroll-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: var(--color-bg-tertiary);
+    z-index: 20;
+}
+
+.scroll-progress-bar {
+    height: 100%;
+    background-color: var(--color-accent);
+    transition: width 0.1s linear;
+}
+
+.scroll-indicator {
+    position: absolute;
+    bottom: var(--space-8);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+    z-index: 20;
+    animation: bounce 2s ease-in-out infinite;
+}
+
+.scroll-arrow {
+    animation: arrowPulse 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+
+    0%,
+    100% {
+        transform: translateX(-50%) translateY(0);
+    }
+
+    50% {
+        transform: translateX(-50%) translateY(5px);
+    }
+}
+
+@keyframes arrowPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Loader */
+.scroll-sequence-loader {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-bg-primary);
+}
+
+.loader-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-6);
+}
+
+.loader-logo {
+    font-family: var(--font-family-hero);
+    font-size: var(--font-size-4xl);
+    letter-spacing: 0.1em;
+    color: var(--color-accent);
+}
+
+.loader-bar {
+    width: 200px;
+    height: 3px;
+    background-color: var(--color-bg-tertiary);
+    overflow: hidden;
+}
+
+.loader-progress {
+    height: 100%;
+    width: 30%;
+    background-color: var(--color-accent);
+    animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(400%);
+    }
+}
+
+.loader-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .hero-text {
+        font-size: clamp(2.5rem, 15vw, 5rem);
+    }
+
+    .hero-subtext {
+        font-size: var(--font-size-base);
+    }
+
+    .scroll-indicator {
+        bottom: var(--space-6);
+        font-size: var(--font-size-xs);
+    }
+
+    @keyframes slideInFromRight {
+        0% {
+            opacity: 0;
+            transform: translate(-50%, -50%) translateX(50px);
+        }
+
+        100% {
+            opacity: 1;
+            transform: translate(-50%, -50%) translateX(0);
+        }
+    }
+
+    @keyframes slideOutToLeft {
+        0% {
+            opacity: 1;
+            transform: translate(-50%, -50%) translateX(0);
+        }
+
+        100% {
+            opacity: 0;
+            transform: translate(-50%, -50%) translateX(-50px);
+        }
+    }
+}

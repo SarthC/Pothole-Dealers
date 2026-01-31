@@ -1,0 +1,16 @@
+{
+    "name": "pofix-backend",
+    "version": "1.0.0",
+    "description": "Backend API for Pofix pothole reporting app",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "node index.js"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.3",
+        "express": "^4.18.2",
+        "multer": "^1.4.5-lts.1"
+    }
+}
