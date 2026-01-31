@@ -11,7 +11,7 @@ function Dashboard() {
     const [contractors, setContractors] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all') // all, pending, progress, resolved
-    const [sortBy, setSortBy] = useState('newest') // newest, severe
+    const [sortBy, setSortBy] = useState('newest') // newest, severe, topReporter
 
     useEffect(() => {
         loadReports()
@@ -71,6 +71,24 @@ function Dashboard() {
 
         if (filter !== 'all') {
             filtered = filtered.filter(r => r.status === filter)
+        }
+
+        // For topReporter sort, count reports per user
+        if (sortBy === 'topReporter') {
+            // Count reports per user (using reporterName field)
+            const reportCountByUser = {}
+            filtered.forEach(report => {
+                const userName = report.reporterName || report.reporterEmail || 'Anonymous'
+                reportCountByUser[userName] = (reportCountByUser[userName] || 0) + 1
+            })
+            // Sort by user's report count (descending), then by date
+            return filtered.sort((a, b) => {
+                const userA = a.reporterName || a.reporterEmail || 'Anonymous'
+                const userB = b.reporterName || b.reporterEmail || 'Anonymous'
+                const countDiff = reportCountByUser[userB] - reportCountByUser[userA]
+                if (countDiff !== 0) return countDiff
+                return new Date(b.createdAt) - new Date(a.createdAt)
+            })
         }
 
         return filtered.sort((a, b) => {
@@ -133,6 +151,7 @@ function Dashboard() {
                                 >
                                     <option value="newest">Newest First</option>
                                     <option value="severe">Severity (High to Low)</option>
+                                    <option value="topReporter">Top Reporters</option>
                                 </select>
                             </div>
                         </div>

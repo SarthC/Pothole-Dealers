@@ -52,8 +52,8 @@ export function speakAlert(message) {
         return
     }
 
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel()
+    // Do not cancel ongoing speech - allow queuing
+    // window.speechSynthesis.cancel()
 
     const utterance = new SpeechSynthesisUtterance(message)
     utterance.rate = 1.1

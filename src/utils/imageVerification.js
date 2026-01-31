@@ -1,10 +1,180 @@
 // Image verification utilities for POFIX
-// Checks: Photo age (max 48 hours), GPS extraction, content validation via backend API
+// Checks: AI content verification using TensorFlow.js MobileNet, GPS extraction
 
 import EXIF from 'exif-js'
+import * as tf from '@tensorflow/tfjs'
+import * as mobilenet from '@tensorflow-models/mobilenet'
 
-// Backend API URL
-const API_BASE = 'http://localhost:3001'
+// Cache the model after first load
+let cachedModel = null
+
+// Keywords that indicate road/pothole related content (ImageNet classes MobileNet recognizes)
+const ROAD_KEYWORDS = [
+    // Roads and surfaces
+    'road', 'street', 'pavement', 'asphalt', 'concrete', 'gravel', 'stone',
+    'highway', 'lane', 'path', 'sidewalk', 'curb', 'manhole', 'gutter',
+    'ground', 'floor', 'surface', 'crack', 'hole', 'dirt', 'mud', 'sand',
+    // Vehicles (common in road photos)
+    'car', 'vehicle', 'wheel', 'tire', 'traffic', 'cab', 'taxi', 'jeep',
+    'minivan', 'ambulance', 'bus', 'truck', 'trailer', 'van', 'pickup',
+    'motor', 'bicycle', 'bike', 'scooter', 'moped', 'motorcycle',
+    // Road infrastructure
+    'crosswalk', 'zebra', 'barrier', 'guardrail', 'cone', 'sign', 'pole',
+    'light', 'lamp', 'signal', 'parking', 'meter', 'hydrant', 'mailbox',
+    // Outdoor general
+    'outdoor', 'outside', 'urban', 'city', 'town', 'building', 'bridge',
+    'tunnel', 'overpass', 'underpass', 'intersection', 'corner',
+    // Common objects near roads
+    'bench', 'trash', 'bin', 'fence', 'wall', 'gate', 'shop', 'store'
+]
+
+// Keywords that indicate NOT a road photo (should reject these)
+const REJECT_KEYWORDS = [
+    // People
+    'person', 'face', 'people', 'selfie', 'portrait', 'man', 'woman', 'boy', 'girl',
+    // Food
+    'food', 'meal', 'dish', 'plate', 'pizza', 'burger', 'fruit', 'vegetable', 'cake',
+    // Indoor
+    'indoor', 'room', 'bedroom', 'kitchen', 'bathroom', 'living', 'office', 'desk',
+    // Furniture
+    'chair', 'table', 'sofa', 'couch', 'bed', 'cabinet', 'shelf', 'drawer',
+    // Animals
+    'animal', 'dog', 'cat', 'bird', 'fish', 'horse', 'cow', 'sheep', 'pet',
+    // Electronics
+    'screen', 'monitor', 'laptop', 'computer', 'phone', 'television', 'tv',
+    // Documents, diagrams, screenshots
+    'text', 'document', 'paper', 'book', 'magazine', 'newspaper',
+    'diagram', 'flowchart', 'chart', 'graph', 'menu', 'web', 'website', 'comic',
+    'envelope', 'packet', 'notebook', 'binder', 'folder', 'letter',
+    // Nature (not road)
+    'flower', 'tree', 'plant', 'forest', 'ocean', 'beach', 'mountain', 'sky', 'cloud'
+]
+
+/**
+ * Load MobileNet model (cached)
+ */
+async function loadModel() {
+    if (cachedModel) return cachedModel
+    console.log('🤖 Loading MobileNet model...')
+    cachedModel = await mobilenet.load()
+    console.log('✅ MobileNet model loaded')
+    return cachedModel
+}
+
+/**
+ * Verify image content using TensorFlow.js MobileNet
+ * @param {HTMLImageElement|string} imageSource - Image element or base64 string
+ * @returns {Promise<{valid: boolean, confidence: number, message: string, predictions: Array}>}
+ */
+export async function verifyImageWithAI(imageSource) {
+    try {
+        // Load model
+        const model = await loadModel()
+
+        // Create image element if base64 string provided
+        let imgElement = imageSource
+        if (typeof imageSource === 'string') {
+            imgElement = await createImageElement(imageSource)
+        }
+
+        // Run classification
+        console.log('🔍 Analyzing image content...')
+        const predictions = await model.classify(imgElement)
+        console.log('📋 AI Predictions:', predictions)
+
+        // Check predictions against keywords
+        let isRoadRelated = false
+        let isRejected = false
+        let matchedKeyword = ''
+        let rejectedKeyword = ''
+        let confidence = 0
+
+        for (const prediction of predictions) {
+            const label = prediction.className.toLowerCase()
+
+            // Check for rejection keywords first
+            for (const keyword of REJECT_KEYWORDS) {
+                if (label.includes(keyword) && prediction.probability > 0.05) { // Strict rejection
+                    isRejected = true
+                    rejectedKeyword = keyword
+                    break
+                }
+            }
+
+            // Check for road-related keywords
+            for (const keyword of ROAD_KEYWORDS) {
+                if (label.includes(keyword)) {
+                    isRoadRelated = true
+                    matchedKeyword = keyword
+                    confidence = prediction.probability
+                    break
+                }
+            }
+
+            if (isRejected) {
+                return {
+                    valid: false,
+                    confidence: 0,
+                    message: `❌ Image rejected: Detected ${rejectedKeyword}. Please upload a clear photo of road damage.`,
+                    predictions
+                }
+            }
+
+            // Check for road-related keywords
+            for (const keyword of ROAD_KEYWORDS) {
+                if (label.includes(keyword)) {
+                    isRoadRelated = true
+                    matchedKeyword = keyword
+                    confidence = prediction.probability
+                    break
+                }
+            }
+        }
+
+        // Determine result
+
+        // Case 1: POSITIVE MATCH - It's definitely a road/pothole
+        if (isRoadRelated) {
+            return {
+                valid: true,
+                confidence,
+                message: '✅ Image verified',
+                predictions
+            }
+        }
+
+        // Case 2: NO MATCH but NOT REJECTED - Ambiguous (Innocent until proven guilty)
+        // MobileNet isn't perfect, so we allow "unknown" images as long as they aren't clearly invalid (like faces/food)
+        return {
+            valid: true,
+            confidence: 0.1,
+            message: '✅ Image verified (General Outdoor)',
+            predictions
+        }
+
+    } catch (error) {
+        console.error('AI verification error:', error)
+        return {
+            valid: false, // Reject on error
+            confidence: 0,
+            message: '❌ AI verification unavailable. Please use a valid image format.',
+            predictions: []
+        }
+    }
+}
+
+/**
+ * Create image element from base64 string
+ */
+function createImageElement(base64) {
+    return new Promise((resolve, reject) => {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => resolve(img)
+        img.onerror = reject
+        img.src = base64
+    })
+}
 
 /**
  * Extract EXIF data from image file
@@ -24,7 +194,6 @@ export function extractExifData(file) {
                             const dateStr = EXIF.getTag(this, 'DateTimeOriginal')
                             let date = null
                             if (dateStr) {
-                                // Format: "2024:01:30 14:30:00"
                                 const [datePart, timePart] = dateStr.split(' ')
                                 const [year, month, day] = datePart.split(':')
                                 const [hour, min, sec] = timePart.split(':')
@@ -79,105 +248,53 @@ function convertDMSToDD(degrees, minutes, seconds, direction) {
 }
 
 /**
- * Verify image age is within limit
- * @param {Date} photoDate - Date photo was taken
- * @param {number} maxHours - Maximum allowed age in hours (default 48)
- * @returns {{valid: boolean, warning: boolean, message: string}}
- */
-export function verifyImageAge(photoDate, maxHours = 48) {
-    if (!photoDate) {
-        // Missing EXIF is common when sharing via Gmail/WhatsApp - allow with warning
-        return {
-            valid: true,  // Changed from false - allow upload
-            warning: true,
-            message: 'Photo date could not be verified. This may happen if shared via email/messaging apps. Please ensure this is a recent photo.'
-        }
-    }
-
-    const now = new Date()
-    const ageMs = now - photoDate
-    const ageHours = ageMs / (1000 * 60 * 60)
-
-    if (ageHours > maxHours) {
-        const ageDays = Math.floor(ageHours / 24)
-        return {
-            valid: false,
-            warning: false,
-            message: `This photo is ${ageDays} day(s) old. Please upload a photo taken within the last 48 hours.`
-        }
-    }
-
-    return {
-        valid: true,
-        warning: false,
-        message: 'Photo date verified.'
-    }
-}
-
-/**
- * Verify image content via backend API (Hugging Face)
- * @param {string} imageBase64 - Base64 encoded image
- * @returns {Promise<{valid: boolean, warning: boolean, message: string}>}
- */
-export async function verifyImageContent(imageBase64) {
-    try {
-        const response = await fetch(`${API_BASE}/api/verify-image`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64 })
-        })
-
-        if (!response.ok) {
-            throw new Error('API request failed')
-        }
-
-        const result = await response.json()
-        return {
-            valid: result.valid,
-            warning: result.warning || false,
-            message: result.message || 'Verification complete.'
-        }
-    } catch (error) {
-        console.error('Content verification error:', error)
-        return {
-            valid: true,
-            warning: true,
-            message: 'Could not verify image content. Please ensure this shows a pothole.'
-        }
-    }
-}
-
-/**
- * Full image verification pipeline (EXIF only)
+ * Full image verification pipeline
+ * Uses AI to verify image content, and EXIF for GPS extraction
  * @param {File} file - Image file
- * @returns {Promise<{valid: boolean, warnings: string[], errors: string[], exifData: Object}>}
+ * @returns {Promise<{valid: boolean, warnings: string[], errors: string[], exifData: Object, aiResult: Object}>}
  */
 export async function verifyImage(file) {
     const result = {
         valid: true,
         warnings: [],
         errors: [],
-        exifData: { date: null, gps: null }
+        exifData: { date: null, gps: null },
+        aiResult: null
     }
 
-    // Step 1: Extract EXIF data
+    // Step 1: Extract EXIF data (for GPS only, not blocking)
     console.log('🔍 Extracting EXIF data...')
     const exifData = await extractExifData(file)
     result.exifData = exifData
     console.log('📋 EXIF data:', exifData)
 
-    // Step 2: Verify age (requires EXIF date)
-    console.log('🔍 Checking photo age...')
-    const ageResult = verifyImageAge(exifData.date)
-    console.log('📋 Age check result:', ageResult)
+    // Step 2: AI-based content verification
+    console.log('🤖 Running AI verification...')
+    const base64 = await fileToBase64(file)
+    const aiResult = await verifyImageWithAI(base64)
+    result.aiResult = aiResult
+    console.log('📋 AI result:', aiResult)
 
-    if (!ageResult.valid) {
+    if (!aiResult.valid) {
         result.valid = false
-        result.errors.push(ageResult.message)
-    } else if (ageResult.warning) {
-        result.warnings.push(ageResult.message)
+        result.errors.push(aiResult.message)
+    } else if (aiResult.confidence < 0.5) {
+        // Just a warning if low confidence but matched
+        // result.warnings.push(aiResult.message)
     }
 
-    console.log('📋 Final result:', result)
+    console.log('📋 Final verification result:', result)
     return result
+}
+
+/**
+ * Convert file to base64
+ */
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+    })
 }

@@ -341,7 +341,7 @@ function Report() {
                         {/* Verification Feedback */}
                         {verifying && (
                             <div className="verification-status verifying">
-                                <span className="spinner"></span> Verifying image...
+                                <span className="spinner"></span> Analyzing image with AI...
                             </div>
                         )}
                         {verificationResult && !verifying && (

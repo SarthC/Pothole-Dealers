@@ -59,7 +59,7 @@ function DriveSafe() {
     const watchIdRef = useRef(null)
     const alertedIdsRef = useRef(new Set())
 
-    const ALERT_RADIUS = 150 // meters - trigger voice alert
+    const ALERT_RADIUS = 200 // meters - trigger voice alert
     const SCAN_RADIUS = 500 // meters - show on map
 
     // Load potholes on mount
@@ -138,8 +138,8 @@ function DriveSafe() {
             },
             {
                 enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 5000
+                maximumAge: 2000, // Accept positions up to 2 seconds old
+                timeout: 30000 // Wait up to 30 seconds for a fix
             }
         )
     }, [])
@@ -273,7 +273,7 @@ function DriveSafe() {
                         <span><span className="dot small"></span> Small</span>
                     </div>
                     <p className="legend-desc">
-                        🔴 Alert Zone (150m) &nbsp; 🔵 Scan Zone (500m)
+                        🔴 Alert Zone (200m) &nbsp; 🔵 Scan Zone (500m)
                     </p>
                 </div>
             </div>
