@@ -1,83 +1,96 @@
 # POFIX - AI-Powered Pothole Reporting & Navigation Platform
 
-POFIX is a modern web application designed to help communities and authorities track, report, and navigate around road hazards. It combines **client-side AI** for instant report verification with **real-time voice navigation** to keep drivers safe.
+**A community-driven solution to fix roads faster and keep drivers safe.**
 
-## 🚀 Key Features
+## 🎥 Product Demo
+**Live App:** [https://po-ejhp2dpkw-sarthaks-projects-10914350.vercel.app/](https://po-ejhp2dpkw-sarthaks-projects-10914350.vercel.app/)
+**Demo Video:** [Watch on Google Drive](https://drive.google.com/file/d/1QwxkwEn8Jgvm3OSWP2NLU5ZDERltcOK4/view?usp=drive_link)
 
-### 📷 Smart Reporting with AI Verification
-- **Instant AI Check**: Uses **TensorFlow.js (MobileNet)** running entirely in the browser to verify if an uploaded photo contains road/pothole content.
-- **Permissive Logic**: Accepts real-world road photos while strictly rejecting invalid content like selfies, food, or documents.
-- **EXIF GPS**: Automatically extracts location data from photos for pinpoint accuracy.
+---
 
-### 🚗 Drive Safe Mode
-- **Real-Time Voice Alerts**: "Caution! Critical pothole ahead, 50 meters."
-- **Sequential Alerts**: Smart queuing system ensures you hear about the **nearest** hazard first.
-- **Proximity Radar**: Scans a 500m radius and alerts you within 200m.
-- **Background Tracking**: Optimized geolocation keeps tracking active even with intermittent GPS signals.
+## 🛑 Problem Statement
+Potholes are a major cause of vehicle damage and fatal accidents globally, yet reporting them is often a slow, manual process. Authorities lack real-time data to prioritize repairs, leading to inefficient resource allocation and prolonged road hazards.
 
-### 📊 Live Dashboard
-- **Heatmap View**: Visualizes pothole density and severity across the city.
-- **Leaderboard**: Gamified "Top Reporters" tracking to encourage community participation.
-- **Real-Time Sync**: Powered by Firebase to show reports instantly as they happen.
+## 👥 Users & Context
+*   **Daily Commuters:** Drivers and cyclists who are at risk of accidents and need real-time warnings.
+*   **Municipal Corporations:** Government bodies needing verified, prioritized data to schedule repairs efficiently.
+*   **NGOs & Volunteers:** Community groups looking for data-driven ways to improve local infrastructure.
+*   **Context:** Used primarily on mobile devices while on the road (Drive Safe Mode) or when spotting a hazard (Reporting Mode).
+
+---
+
+## 💡 Solution Overview
+POFIX bridges the gap between citizens and authorities through a three-pillared approach:
+1.  **AI-Verified Reporting:** Citizens report potholes using camera-only photos, verified instantly by Edge AI to prevent spam.
+2.  **Prioritized Dashboard:** Authorities see a live heatmap of hazards, automatically ranked by severity and report frequency.
+3.  **Drive Safe Mode:** Drivers receive real-time audio alerts when approaching verified potholes, preventing accidents before repairs occur.
+
+---
 
 ## 🛠️ Technology Stack
+*   **Frontend:** React.js + Vite (Glassmorphism UI)
+*   **AI Model:** TensorFlow.js + MobileNet (Client-side inference)
+*   **Database & Auth:** Firebase Realtime Database, Storage, and Authentication
+*   **Mapping:** Leaflet.js / OpenStreetMap
+*   **APIs:** Web Speech API (Voice Alerts), Geolocation API, EXIF.js
 
-- **Frontend**: React.js + Vite (Glassmorphism Design)
-- **AI/ML**: TensorFlow.js, MobileNet (Client-side Image Classification)
-- **Maps**: Leaflet.js, React-Leaflet, OpenStreetMap
-- **Backend**: Firebase Realtime Database & Auth
-- **Utilities**: Web Speech API (Voice), EXIF.js, Geolocation API
+---
 
-## 🏃‍♂️ Getting Started
+## 🏃‍♂️ Setup & Run
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn
+*   Node.js (v16+)
+*   npm
 
-### Installation
+### Steps
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/SarthC/Pothole-Dealers.git
+    cd Pothole-Dealers
+    ```
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/SarthC/Pothole-Dealers.git
-   ```
+2.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+3.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
 
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
+4.  **Open App**
+    Visit `http://localhost:5173` in your browser.
 
-4. Open `http://localhost:5173` in your browser.
+---
 
-## 📱 How to Use
+## 🤖 Models & Data
+*   **Model Used:** **MobileNet (TensorFlow.js)**.
+*   **Justification:** Chosen for its ability to run strictly client-side (Edge AI), ensuring low latency and user privacy.
+*   **Data Provenance:** The model is pre-trained on the **ImageNet** dataset (Open Source / BSD-3 License).
+*   **Data Privacy:** No user photos are used for model training. User uploads are processed ephemerally for verification and stored securely in Firebase only after valid submission.
 
-1. **Report a Pothole**: Click "Report Pothole", take a photo, and let our AI verify it. The location is auto-detected or you can manually enter location through fetching through gps or map pin.
-2. **Drive Safe**: Before driving, toggle "Drive Safe Mode". The app will speak to you when hazards are near.
-3. **View Dashboard**: Check the map to see fixed vs. active potholes in your area.
+## 🛡️ Evaluation & Guardrails
+To prevent misinformation and abuse:
+1.  **Strict "Reject" Keywords:** The AI immediately blocks images containing faces, indoor settings, food, or screens/documents.
+2.  **Confidence Thresholds:** Reports require >50% confidence in road-related classes (e.g., "asphalt", "street", "pavement").
+3.  **GPS Enforcement:** Reports must have valid GPS coordinates (extracted from EXIF or device location) to prevent fake locations.
+4.  **48-Hour Hard Limit:** Only metadata-verified photos taken within the last 48 hours are accepted to ensure current road conditions.
 
-## 🤖 AI Implementation Details
-We use a **permissive verification strategy** to handle real-world lighting and textures:
-- **Strict Rejection**: Immediately blocks faces, indoor scenes, screenshots, and documents.
-- **Road Detection**: Looks for asphalt, vehicles, and street patterns.
-- **Ambiguity Handler**: If an image is ambiguous (e.g., close-up dirt) but not explicitly rejected, it is allowed to prevent false negatives.
+## ⚠️ Known Limitations & Risks
+*   **Night/Low Light:** AI accuracy drops significantly in poor lighting conditions.
+*   **Blurry Images:** Motion blur from moving vehicles can cause false rejections.
+*   **Network Dependence:** While AI is offline-capable, submitting reports requires an active internet connection.
+
+---
 
 ## 👥 Team
-Team Name: Pothole Dealers
+**Team Name:** Pothole Dealers
 
-Participated as a Solo team
+*   **Sarthak Laxman Choudhari** - *Lead Developer & Solo Contributor*
+    *   Role: Full Stack Development, AI Integration, UI/UX Design
 
-Team member: Sarthak Laxman Choudhari
+---
 
 ## 📄 License
-MIT License - see LICENSE file for details.
-
-## 🔮 Future Roadmap (Phase 2)
-
-- [ ] **Automated Vehicle Integration**: API support for modern vehicles (Tesla/ADAS systems) to use **in-built car cameras** for automatic pothole reporting.
-- [ ] **Automated Dashcam Mode**: Phone mount support to auto-detect and report potholes while driving using real-time video analysis (Zero-Touch Reporting).
-- [ ] **Accelerometer Integration**: Use phone sensors to detect "bumps" and G-force impacts to verify pothole severity automatically.
-- [ ] **Government Portal**: A dedicated admin dashboard for road authorities to manage repairs and dispatch crews.
+This project is licensed under the **MIT License**.
