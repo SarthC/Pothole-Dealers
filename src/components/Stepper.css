@@ -1,0 +1,212 @@
+/* Stepper Component Styles */
+.stepper-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    width: 100%;
+    min-height: 400px;
+    /* sm:aspect-[4/3] approximation */
+}
+
+.stepper-card {
+    width: 100%;
+    max-width: 600px;
+    /* max-w-md is ~448px, making it slightly wider for inputs */
+    background-color: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 24px);
+    /* rounded-4xl */
+    box-shadow: var(--shadow-xl);
+    overflow: hidden;
+    position: relative;
+    padding-bottom: var(--space-4);
+}
+
+.stepper-header {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-8);
+    background-color: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.stepper-content-wrapper {
+    padding: var(--space-8);
+    position: relative;
+    /* Styles for nested steps */
+}
+
+.stepper-footer {
+    padding: var(--space-8);
+    padding-top: 0;
+}
+
+.stepper-controls {
+    display: flex;
+    justify-content: flex-end;
+    /* Default right align */
+    gap: var(--space-4);
+    margin-top: var(--space-6);
+}
+
+.stepper-controls.has-back {
+    justify-content: space-between;
+}
+
+/* Buttons */
+.step-btn-back {
+    padding: var(--space-2) var(--space-4);
+    border-radius: 4px;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.step-btn-back:hover {
+    color: var(--color-text-primary);
+}
+
+.step-btn-next {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    /* rounded-full */
+
+    /* Using component specific color or app accent */
+    background-color: var(--color-success, #4ade80);
+    color: #ffffff;
+
+    padding: 0.5rem 1.25rem;
+    font-weight: var(--font-weight-medium);
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.step-btn-next:hover {
+    background-color: #22c55e;
+    /* green-600 */
+}
+
+/* Indicators */
+.step-indicator-wrapper {
+    position: relative;
+    cursor: pointer;
+    outline: none;
+}
+
+.step-circle {
+    display: flex;
+    width: 2rem;
+    /* w-8 */
+    height: 2rem;
+    /* h-8 */
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: all 0.3s;
+}
+
+/* Status Colors (controlled by JS inline styles mostly, but defaults here) */
+.step-circle-inactive {
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+}
+
+.step-circle-active {
+    background-color: var(--color-accent);
+    color: var(--color-bg-primary);
+}
+
+.step-connector {
+    flex: 1;
+    height: 2px;
+    background-color: var(--color-border);
+    margin: 0 var(--space-2);
+    position: relative;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.step-content-container {
+    position: relative;
+    overflow: hidden;
+}
+
+/* --- Split Layout (Sidebar Right) --- */
+.stepper-wrapper.layout-split {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-8);
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.stepper-wrapper.layout-split .stepper-card {
+    flex: 1;
+    /* Main content takes available space */
+    order: 1;
+    /* Content first (left) */
+    max-width: none;
+}
+
+.stepper-wrapper.layout-split .stepper-sidebar {
+    order: 2;
+    /* Sidebar second (right) */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    /* Gap handled by connectors/padding */
+    padding-top: var(--space-6);
+    min-width: 60px;
+}
+
+/* Vertical Connector */
+.step-connector.vertical {
+    width: 2px;
+    height: 50px;
+    /* Adjust based on spacing */
+    flex: none;
+    margin: var(--space-1) 0;
+}
+
+.step-connector.vertical>div {
+    width: 100% !important;
+    /* Override width animation */
+    height: 0;
+    /* Animate height */
+    top: 0;
+    left: 0;
+    background-color: var(--color-accent);
+}
+
+/* Adjust header in split mode - remove it or make it invisible if sidebar is used */
+.stepper-header.hidden-desktop {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .stepper-wrapper.layout-split {
+        flex-direction: column;
+    }
+
+    .stepper-wrapper.layout-split .stepper-sidebar {
+        display: none;
+        /* Hide sidebar on mobile, use default header? */
+    }
+
+    .stepper-header.hidden-desktop {
+        display: flex;
+        /* Show normal header on mobile */
+    }
+}

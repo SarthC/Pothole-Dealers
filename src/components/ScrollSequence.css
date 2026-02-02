@@ -55,44 +55,20 @@
     pointer-events: none;
 }
 
-/* Enter Animation - Slide in from right with increasing opacity */
+/* Enter Animation - Removed sliding/fading */
 .text-item.entering {
-    animation: slideInFromRight 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    opacity: 1;
 }
 
-/* Exit Animation - Slide out to left with decreasing opacity */
+/* Exit Animation - Removed sliding/fading */
 .text-item.exiting {
-    animation: slideOutToLeft 0.5s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards;
+    opacity: 0;
 }
 
-/* Active state (after animation completes) */
+/* Active state */
 .text-item.active {
     opacity: 1;
-    transform: translate(-50%, -50%) translateX(0);
-}
-
-@keyframes slideInFromRight {
-    0% {
-        opacity: 0;
-        transform: translate(-50%, -50%) translateX(100px);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translate(-50%, -50%) translateX(0);
-    }
-}
-
-@keyframes slideOutToLeft {
-    0% {
-        opacity: 1;
-        transform: translate(-50%, -50%) translateX(0);
-    }
-
-    100% {
-        opacity: 0;
-        transform: translate(-50%, -50%) translateX(-100px);
-    }
+    transform: translate(-50%, -50%);
 }
 
 /* Hero Text Styling with Hezba Font */

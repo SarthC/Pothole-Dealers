@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { saveReportToDatabase } from '../utils/realtimeDb'
 import { verifyImage, preloadModel } from '../utils/imageVerification'
 import MapPicker from '../components/MapPicker'
+import Stepper, { Step } from '../components/Stepper'
 import './Report.css'
 
 // Compress image to base64 (max 200KB)
@@ -59,12 +60,16 @@ function Report() {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [showMap, setShowMap] = useState(false)
     const [submitted, setSubmitted] = useState(false)
-    const [gpsLoading, setGpsLoading] = useState(false)
+    const [gpsLoading, setGpsLoading] = useState(false) // For manual GPS button
+
+    // Stepper State
+    const [currentStep, setCurrentStep] = useState(1)
 
     // Verification state
     const [verifying, setVerifying] = useState(false)
     const [verificationResult, setVerificationResult] = useState(null)
     const [locationFromPhoto, setLocationFromPhoto] = useState(false)
+    const [gpsError, setGpsError] = useState(null) // GPS error message
 
     // Pre-load MobileNet model when page loads (eliminates wait on image upload)
     useEffect(() => {
@@ -72,14 +77,16 @@ function Report() {
     }, [])
 
 
+    // Unified handler for both camera and gallery - extracts GPS from image EXIF
     const handleImageUpload = async (e) => {
         const file = e.target.files[0]
         if (!file) return
 
-        // Reset verification state
+        // Reset states
         setVerifying(true)
         setVerificationResult(null)
         setLocationFromPhoto(false)
+        setGpsError(null)
 
         // Read file as base64
         const reader = new FileReader()
@@ -92,14 +99,15 @@ function Report() {
                 imageFile: file
             }))
 
-            // Verify image (EXIF check only)
+            // Verify image and extract EXIF GPS
             try {
                 const result = await verifyImage(file)
                 setVerificationResult(result)
 
-                // Auto-fill GPS from photo if available
+                // Check if GPS is available in EXIF (where photo was actually taken)
                 if (result.exifData?.gps) {
                     const { lat, lng } = result.exifData.gps
+                    console.log('📍 GPS extracted from image EXIF:', lat, lng)
                     // Reverse geocode the GPS coordinates
                     try {
                         const response = await fetch(
@@ -115,6 +123,9 @@ function Report() {
                             }
                         }))
                         setLocationFromPhoto(true)
+
+                        // Verification Successful - Auto Advance to Step 2
+                        setTimeout(() => setCurrentStep(2), 1500)
                     } catch {
                         setFormData(prev => ({
                             ...prev,
@@ -125,18 +136,27 @@ function Report() {
                             }
                         }))
                         setLocationFromPhoto(true)
+
+                        // Verification Successful - Auto Advance to Step 2
+                        setTimeout(() => setCurrentStep(2), 1500)
                     }
                 } else {
-                    // Fallback: No EXIF GPS found, auto-fetch device location
-                    console.log('📷 No EXIF GPS found. Falling back to Device GPS...')
-                    handleGetLocation()
+                    // NO GPS in image - reject the upload
+                    console.log('📷 No GPS found in image EXIF. Upload blocked.')
+                    setGpsError('❌ No GPS location found in image. Please ensure location services are enabled when taking the photo.')
+                    // Mark as invalid since GPS is required
+                    setVerificationResult(prev => ({
+                        ...prev,
+                        valid: false,
+                        errors: [...(prev?.errors || []), '❌ No GPS location found in image. Enable location on your camera and try again.']
+                    }))
                 }
             } catch (error) {
                 console.error('Verification error:', error)
                 setVerificationResult({
-                    valid: true,
-                    warnings: ['Could not verify image. Please ensure this is a recent pothole photo.'],
-                    errors: []
+                    valid: false,
+                    warnings: [],
+                    errors: ['Could not verify image. Please ensure this is a valid pothole photo with GPS data.']
                 })
             } finally {
                 setVerifying(false)
@@ -289,9 +309,13 @@ function Report() {
                                         location: { lat: null, lng: null, address: '' },
                                         severity: 'medium',
                                         roadType: 'city',
-                                        description: ''
+                                        description: '',
+                                        reporterName: ''
                                     })
                                     setPreview(null)
+                                    setVerificationResult(null)
+                                    setGpsError(null)
+                                    setLocationFromPhoto(false)
                                 }}
                                 className="btn btn-primary"
                             >
@@ -319,219 +343,264 @@ function Report() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="report-form">
-                    <div className="form-section">
-                        <h3>1. Upload Photo</h3>
+                    <Stepper
+                        activeStep={currentStep}
+                        initialStep={1}
+                        layout="split"
+                        footerClassName="hidden" // We use custom buttons in steps
+                        stepCircleContainerClassName="shadow-lg border-none bg-zinc-900"
+                        contentClassName="min-h-[300px]"
+                    >
+                        {/* STEP 1: Image Verification */}
+                        <Step>
+                            <div className="form-section pt-0 border-none">
+                                <h3 className="text-center mb-6">1. Image & Pothole Verification</h3>
 
-                        {/* Image Preview Area */}
-                        {preview && (
-                            <div className="image-upload has-image">
-                                <img ref={previewImgRef} src={preview} alt="Pothole preview" className="image-preview" crossOrigin="anonymous" />
-                            </div>
-                        )}
+                                {/* Image Preview Area */}
+                                {preview && (
+                                    <div className="image-upload has-image">
+                                        <img ref={previewImgRef} src={preview} alt="Pothole preview" className="image-preview" crossOrigin="anonymous" />
+                                    </div>
+                                )}
 
-                        {/* Camera and Gallery Buttons */}
-                        {!preview && (
-                            <div className="upload-buttons">
-                                <button
-                                    type="button"
-                                    className="btn btn-primary upload-btn"
-                                    onClick={() => document.getElementById('camera-input').click()}
-                                >
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                                        <circle cx="12" cy="13" r="4" />
-                                    </svg>
-                                    Take Photo
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary upload-btn"
-                                    onClick={() => fileInputRef.current?.click()}
-                                >
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                                        <circle cx="8.5" cy="8.5" r="1.5" />
-                                        <path d="M21 15l-5-5L5 21" />
-                                    </svg>
-                                    Upload from Gallery
-                                </button>
-                            </div>
-                        )}
+                                {/* Camera and Gallery Buttons */}
+                                {!preview && (
+                                    <div className="upload-buttons">
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary upload-btn"
+                                            onClick={() => document.getElementById('camera-input').click()}
+                                        >
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                                <circle cx="12" cy="13" r="4" />
+                                            </svg>
+                                            Take Photo
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary upload-btn"
+                                            onClick={() => fileInputRef.current?.click()}
+                                        >
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <path d="M21 15l-5-5L5 21" />
+                                            </svg>
+                                            Upload from Gallery
+                                        </button>
+                                    </div>
+                                )}
 
-                        {preview && (
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => {
-                                    setPreview(null)
-                                    setVerificationResult(null)
-                                    setFormData(prev => ({ ...prev, imageUrl: '', imageFile: null }))
-                                }}
-                                style={{ marginTop: '1rem' }}
-                            >
-                                Change Photo
-                            </button>
-                        )}
+                                {preview && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary center-btn"
+                                        onClick={() => {
+                                            setPreview(null)
+                                            setVerificationResult(null)
+                                            setGpsError(null)
+                                            setLocationFromPhoto(false)
+                                            setFormData(prev => ({ ...prev, imageUrl: '', imageFile: null, location: { lat: null, lng: null, address: '' } }))
+                                        }}
+                                        style={{ marginTop: '1rem', width: '100%' }}
+                                    >
+                                        Change Photo
+                                    </button>
+                                )}
 
-                        <p className="upload-hint" style={{ textAlign: 'center', marginTop: '0.5rem' }}>
-                            📷 Take or upload a pothole photo. Your current GPS location will be used automatically.
-                        </p>
+                                <p className="upload-hint" style={{ textAlign: 'center', marginTop: '1rem' }}>
+                                    📷 Must contain GPS data. AI will verify text/pothole.
+                                </p>
 
-                        {/* Hidden file inputs */}
-                        <input
-                            type="file"
-                            id="camera-input"
-                            accept="image/*"
-                            capture="environment"
-                            onChange={handleImageUpload}
-                            style={{ display: 'none' }}
-                        />
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            accept="image/*"
-                            onChange={handleImageUpload}
-                            className="hidden"
-                        />
+                                {/* Hidden file inputs */}
+                                <input
+                                    type="file"
+                                    id="camera-input"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={handleImageUpload}
+                                    style={{ display: 'none' }}
+                                />
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    accept="image/*"
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                />
 
-                        {/* Verification Feedback */}
-                        {verifying && (
-                            <div className="verification-status verifying">
-                                <span className="spinner"></span> Analyzing image with AI...
-                            </div>
-                        )}
-                        {verificationResult && !verifying && (
-                            <div className={`verification-status ${verificationResult.valid ? 'valid' : 'invalid'}`}>
-                                {verificationResult.errors?.map((err, i) => (
-                                    <div key={i} className="verification-error">❌ {err}</div>
-                                ))}
-                                {verificationResult.warnings?.map((warn, i) => (
-                                    <div key={i} className="verification-warning">⚠️ {warn}</div>
-                                ))}
-                                {verificationResult.valid && verificationResult.errors?.length === 0 && verificationResult.warnings?.length === 0 && (
-                                    <div className="verification-success">✅ Image verified</div>
+                                {/* Verification Feedback */}
+                                {verifying && (
+                                    <div className="verification-status verifying">
+                                        <span className="spinner"></span> Verifying Pothole & GPS...
+                                    </div>
+                                )}
+                                {verificationResult && !verifying && (
+                                    <div className={`verification-status ${verificationResult.valid ? 'valid' : 'invalid'}`}>
+                                        {verificationResult.errors?.map((err, i) => (
+                                            <div key={i} className="verification-error">❌ {err}</div>
+                                        ))}
+                                        {verificationResult.valid && (
+                                            <div className="verification-success">✅ AI Verified: Valid Pothole</div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {locationFromPhoto && (
+                                    <div className="verification-status valid">
+                                        📍 GPS Data Found (Proceeding...)
+                                    </div>
                                 )}
                             </div>
-                        )}
-                        {locationFromPhoto && (
-                            <div className="verification-status valid">
-                                📍 Location extracted from photo
-                            </div>
-                        )}
-                    </div>
+                        </Step>
 
-                    <div className="form-section">
-                        <h3>2. Location</h3>
-                        <div className="location-options">
-                            <button
-                                type="button"
-                                onClick={handleGetLocation}
-                                className="btn btn-secondary"
-                                disabled={gpsLoading}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <circle cx="12" cy="12" r="3" />
-                                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-                                </svg>
-                                {gpsLoading ? 'Detecting...' : 'Use GPS'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setShowMap(true)}
-                                className="btn btn-secondary"
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                                    <circle cx="12" cy="10" r="3" />
-                                </svg>
-                                Pick on Map
-                            </button>
-                        </div>
+                        {/* STEP 2: Location Verification */}
+                        <Step>
+                            <div className="form-section pt-0 border-none">
+                                <h3 className="text-center mb-6">2. EXIF & Location Verification</h3>
 
-                        <div className="input-group">
-                            <label className="input-label">Address / Landmark</label>
-                            <input
-                                type="text"
-                                className="input-field"
-                                placeholder="Enter address or landmark..."
-                                value={formData.location.address}
-                                onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    location: { ...prev.location, address: e.target.value }
-                                }))}
-                            />
-                        </div>
+                                <div className="verification-status valid">
+                                    ✅ EXIF Data Verified <br />
+                                    ✅ GPS Coordinates Extracted
+                                </div>
 
-                        {formData.location.lat && (
-                            <div className="coordinates">
-                                <span>📍 {formData.location.lat.toFixed(4)}, {formData.location.lng.toFixed(4)}</span>
-                            </div>
-                        )}
-                    </div>
+                                {formData.location.lat ? (
+                                    <>
+                                        <div className="coordinates" style={{ display: 'block', textAlign: 'center', marginTop: '1rem' }}>
+                                            <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>📍 Location Detected</div>
+                                            <span>{formData.location.lat.toFixed(6)}, {formData.location.lng.toFixed(6)}</span>
+                                        </div>
 
-                    <div className="form-section">
-                        <h3>3. Reporter Information</h3>
+                                        <div className="input-group" style={{ marginTop: '1.5rem' }}>
+                                            <label className="input-label">Address / Landmark</label>
+                                            <input
+                                                type="text"
+                                                className="input-field"
+                                                placeholder="Enter address or landmark..."
+                                                value={formData.location.address}
+                                                onChange={(e) => setFormData(prev => ({
+                                                    ...prev,
+                                                    location: { ...prev.location, address: e.target.value }
+                                                }))}
+                                            />
+                                        </div>
 
-                        <div className="input-group">
-                            <label className="input-label">Your Name *</label>
-                            <input
-                                type="text"
-                                className="input-field"
-                                placeholder="Enter your name..."
-                                value={formData.reporterName}
-                                onChange={(e) => setFormData(prev => ({ ...prev, reporterName: e.target.value }))}
-                                required
-                            />
-                        </div>
+                                        <div className="location-correction text-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowMap(true)}
+                                                className="btn btn-secondary btn-sm"
+                                                style={{ margin: '0 auto' }}
+                                            >
+                                                Wrong location? Correct on Map
+                                            </button>
+                                        </div>
 
-                        <div className="form-row">
-                            <div className="input-group">
-                                <label className="input-label">Severity</label>
-                                <select
-                                    className="input-field"
-                                    value={formData.severity}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, severity: e.target.value }))}
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary w-full"
+                                            style={{ marginTop: '2rem' }}
+                                            onClick={() => setCurrentStep(3)}
+                                        >
+                                            Confirm Location & Continue
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div className="verification-status invalid">
+                                        ❌ Error: No Location Data. Please go back and retry.
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost w-full"
+                                    style={{ marginTop: '0.5rem' }}
+                                    onClick={() => setCurrentStep(1)}
                                 >
-                                    <option value="small">Small - Minor crack or dip</option>
-                                    <option value="medium">Medium - Notable hole</option>
-                                    <option value="large">Large - Deep or wide hole</option>
-                                    <option value="critical">Critical - Dangerous hazard</option>
-                                </select>
+                                    Back to Photo
+                                </button>
                             </div>
+                        </Step>
 
-                            <div className="input-group">
-                                <label className="input-label">Road Type</label>
-                                <select
-                                    className="input-field"
-                                    value={formData.roadType}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, roadType: e.target.value }))}
+                        {/* STEP 3: Reporter Info */}
+                        <Step>
+                            <div className="form-section pt-0 border-none">
+                                <h3 className="text-center mb-6">3. Reporter Details</h3>
+
+                                <div className="input-group">
+                                    <label className="input-label">Your Name *</label>
+                                    <input
+                                        type="text"
+                                        className="input-field"
+                                        placeholder="Enter your name..."
+                                        value={formData.reporterName}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, reporterName: e.target.value }))}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="form-row" style={{ marginTop: '1rem' }}>
+                                    <div className="input-group">
+                                        <label className="input-label">Severity</label>
+                                        <select
+                                            className="input-field"
+                                            value={formData.severity}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, severity: e.target.value }))}
+                                        >
+                                            <option value="small">Small</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="large">Large</option>
+                                            <option value="critical">Critical</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="input-group">
+                                        <label className="input-label">Road Type</label>
+                                        <select
+                                            className="input-field"
+                                            value={formData.roadType}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, roadType: e.target.value }))}
+                                        >
+                                            <option value="city">City Road</option>
+                                            <option value="residential">Residential</option>
+                                            <option value="highway">Highway</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="input-group" style={{ marginTop: '1rem' }}>
+                                    <label className="input-label">Description (Optional)</label>
+                                    <textarea
+                                        className="input-field"
+                                        placeholder="Details..."
+                                        value={formData.description}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                                        rows={2}
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary btn-lg w-full"
+                                    style={{ marginTop: '2rem' }}
+                                    disabled={isSubmitting}
                                 >
-                                    <option value="residential">Residential</option>
-                                    <option value="city">City Road</option>
-                                    <option value="highway">Highway</option>
-                                </select>
+                                    {isSubmitting ? 'Submitting...' : 'Submit Report'}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost w-full"
+                                    style={{ marginTop: '0.5rem' }}
+                                    onClick={() => setCurrentStep(2)}
+                                    disabled={isSubmitting}
+                                >
+                                    Back
+                                </button>
                             </div>
-                        </div>
-
-                        <div className="input-group">
-                            <label className="input-label">Additional Notes (Optional)</label>
-                            <textarea
-                                className="input-field"
-                                placeholder="Any additional details about the pothole..."
-                                value={formData.description}
-                                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                                rows={3}
-                            />
-                        </div>
-                    </div>
-
-                    <button
-                        type="submit"
-                        className="btn btn-primary btn-lg w-full"
-                        disabled={isSubmitting}
-                    >
-                        {isSubmitting ? 'Submitting...' : 'Submit Report'}
-                    </button>
+                        </Step>
+                    </Stepper>
                 </form>
             </div >
 

@@ -11,7 +11,7 @@ function Dashboard() {
     const [contractors, setContractors] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all') // all, pending, progress, resolved
-    const [sortBy, setSortBy] = useState('newest') // newest, severe, topReporter
+    const [sortBy, setSortBy] = useState('newest') // newest, severe, topReporter, mostReported
 
     useEffect(() => {
         loadReports()
@@ -29,10 +29,46 @@ function Dashboard() {
         }
     }
 
-    const loadContractors = () => {
-        const data = getAllContractorsWithStats()
+    const loadContractors = async () => {
+        // Calculate real-time stats from reports
+        // We'll calculate:
+        // 1. Active potholes per zone (pending/progress)
+        // 2. Fixed potholes per zone (resolved)
+
+        // Wait for reports to be loaded first if checking dependency, 
+        // but typically we can get fresh data or derived from state if effect allows
+        const allReports = await getReportsFromDatabase()
+
+        // Get base contractor list
+        const baseContractors = getAllContractorsWithStats()
+
+        // Calculate real stats
+        const realStats = baseContractors.map(contractor => {
+            const zones = contractor.zones.map(z => z.toLowerCase())
+
+            const activeCount = allReports.filter(r => {
+                const address = (r.location?.address || '').toLowerCase()
+                const isActive = r.status === 'pending' || r.status === 'progress'
+                return isActive && zones.some(zone => address.includes(zone))
+            }).length
+
+            const fixedCount = allReports.filter(r => {
+                const address = (r.location?.address || '').toLowerCase()
+                return r.status === 'resolved' && zones.some(zone => address.includes(zone))
+            }).length
+
+            return {
+                ...contractor,
+                stats: {
+                    ...contractor.stats, // Keep simulated avgResponseTime
+                    activePotholes: activeCount,
+                    fixedLastMonth: fixedCount
+                }
+            }
+        })
+
         // Sort by active potholes (descending)
-        setContractors(data.sort((a, b) => b.stats.activePotholes - a.stats.activePotholes))
+        setContractors(realStats.sort((a, b) => b.stats.activePotholes - a.stats.activePotholes))
     }
 
     const handleStatusChange = async (reportId, newStatus, assignedToUser) => {
@@ -75,13 +111,11 @@ function Dashboard() {
 
         // For topReporter sort, count reports per user
         if (sortBy === 'topReporter') {
-            // Count reports per user (using reporterName field)
             const reportCountByUser = {}
             filtered.forEach(report => {
                 const userName = report.reporterName || report.reporterEmail || 'Anonymous'
                 reportCountByUser[userName] = (reportCountByUser[userName] || 0) + 1
             })
-            // Sort by user's report count (descending), then by date
             return filtered.sort((a, b) => {
                 const userA = a.reporterName || a.reporterEmail || 'Anonymous'
                 const userB = b.reporterName || b.reporterEmail || 'Anonymous'
@@ -91,10 +125,37 @@ function Dashboard() {
             })
         }
 
+        // NEW: Sort by Most Reported (Cluster duplicate reports by location proximity)
+        // We'll naively group by very close lat/lng or identical address
+        if (sortBy === 'mostReported') {
+            // Count duplicates for each report
+            const getDuplicateCount = (targetReport) => {
+                return filtered.filter(r => {
+                    // Check if location is very close (within ~20 meters roughly)
+                    // 0.0002 deg is roughly 22 meters
+                    const latDiff = Math.abs(r.location.lat - targetReport.location.lat)
+                    const lngDiff = Math.abs(r.location.lng - targetReport.location.lng)
+                    return latDiff < 0.0002 && lngDiff < 0.0002
+                }).length
+            }
+
+            return filtered.sort((a, b) => {
+                const countA = getDuplicateCount(a)
+                const countB = getDuplicateCount(b)
+                // Sort by count descending, then by severity
+                if (countB !== countA) return countB - countA
+
+                // Then by severity
+                const severityWeight = { critical: 4, large: 3, medium: 2, small: 1 }
+                return severityWeight[b.severity] - severityWeight[a.severity]
+            })
+        }
+
         return filtered.sort((a, b) => {
             if (sortBy === 'newest') {
                 return new Date(b.createdAt) - new Date(a.createdAt)
             } else if (sortBy === 'severe') {
+                // Modified: Put Critical FIRST
                 const severityWeight = { critical: 4, large: 3, medium: 2, small: 1 }
                 return severityWeight[b.severity] - severityWeight[a.severity]
             }
@@ -151,6 +212,7 @@ function Dashboard() {
                                 >
                                     <option value="newest">Newest First</option>
                                     <option value="severe">Severity (High to Low)</option>
+                                    <option value="mostReported">Most Reported (Duplicates)</option>
                                     <option value="topReporter">Top Reporters</option>
                                 </select>
                             </div>
@@ -223,7 +285,7 @@ function Dashboard() {
                                 ))}
                             </div>
                             <div className="sidebar-footer">
-                                <small>Data based on reported location zones</small>
+                                <small>Real-time data based on reports</small>
                             </div>
                         </div>
                     </aside>

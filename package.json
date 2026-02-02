@@ -13,10 +13,10 @@
     "dependencies": {
         "@tensorflow-models/mobilenet": "^2.1.1",
         "@tensorflow/tfjs": "^4.22.0",
-        "exif-js": "^2.3.0",
-        "exifreader": "^4.36.1",
         "firebase": "^12.8.0",
         "leaflet": "^1.9.4",
+        "motion": "^12.29.3",
+        "piexifjs": "^1.0.6",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-leaflet": "^4.2.1",
