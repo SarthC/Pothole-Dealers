@@ -283,22 +283,42 @@ export async function verifyImage(file) {
         aiResult: null
     }
 
-    // Step 1: Extract EXIF data and validate timestamp
+    // Step 1: Extract EXIF data
     console.log('🔍 Extracting EXIF data...')
     const exifData = await extractExifData(file)
     result.exifData = exifData
     console.log('📋 EXIF data:', exifData)
 
-    if (exifData.date) {
-        const now = new Date()
-        const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
-        console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours`)
+    // STRICT CHECK: Require EXIF data to exist
+    if (!exifData.date && !exifData.gps) {
+        result.valid = false
+        result.errors.push('❌ No EXIF data found. Please use a photo taken directly from your camera. Screenshots, downloaded images, or photos shared via messaging apps do not contain the required metadata.')
+        return result
+    }
 
-        if (hoursDiff > 48) {
-            result.valid = false
-            result.errors.push(`❌ Image rejected: Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`)
-            return result
-        }
+    // STRICT CHECK: Require timestamp in EXIF
+    if (!exifData.date) {
+        result.valid = false
+        result.errors.push('❌ No timestamp found in photo. Please use an original photo taken directly from your camera app.')
+        return result
+    }
+
+    // STRICT CHECK: Validate 48-hour limit
+    const now = new Date()
+    const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
+    console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours`)
+
+    if (hoursDiff > 48) {
+        result.valid = false
+        result.errors.push(`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted to ensure current road conditions.`)
+        return result
+    }
+
+    // STRICT CHECK: Require GPS location in EXIF
+    if (!exifData.gps) {
+        result.valid = false
+        result.errors.push('❌ No GPS location found in photo. Please enable location services in your camera app and take a new photo.')
+        return result
     }
 
     // Step 2: AI-based content verification (Is it a pothole/road image?)
@@ -311,8 +331,10 @@ export async function verifyImage(file) {
     if (!aiResult.valid) {
         result.valid = false
         result.errors.push(aiResult.message)
+        return result
     }
 
+    console.log('✅ All verification checks passed!')
     console.log('📋 Final verification result:', result)
     return result
 }
