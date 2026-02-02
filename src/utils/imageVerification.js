@@ -1,7 +1,7 @@
 // Image verification utilities for POFIX
 // Checks: AI content verification using TensorFlow.js MobileNet, GPS extraction
 
-import EXIF from 'exif-js'
+import ExifReader from 'exifreader'
 import * as tf from '@tensorflow/tfjs'
 import * as mobilenet from '@tensorflow-models/mobilenet'
 
@@ -201,60 +201,51 @@ function createImageElement(base64) {
  * @param {File} file - Image file
  * @returns {Promise<{date: Date|null, gps: {lat: number, lng: number}|null}>}
  */
-export function extractExifData(file) {
-    return new Promise((resolve) => {
-        // Read file as ArrayBuffer for reliable EXIF extraction
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            try {
-                // Parse EXIF directly from ArrayBuffer
-                const exifData = EXIF.readFromBinaryFile(e.target.result)
-                console.log('📷 Raw EXIF data:', exifData)
+export async function extractExifData(file) {
+    try {
+        // Read file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer()
 
-                if (!exifData) {
-                    console.log('📷 No EXIF data found in image')
-                    resolve({ date: null, gps: null })
-                    return
-                }
+        // Parse EXIF using ExifReader
+        const tags = ExifReader.load(arrayBuffer, { expanded: true })
+        console.log('📷 Raw EXIF tags:', tags)
 
-                // Extract date
-                let date = null
-                const dateStr = exifData.DateTimeOriginal || exifData.DateTime
-                if (dateStr) {
-                    console.log('📅 Found date string:', dateStr)
-                    const [datePart, timePart] = dateStr.split(' ')
-                    const [year, month, day] = datePart.split(':')
-                    const [hour, min, sec] = timePart ? timePart.split(':') : [0, 0, 0]
-                    date = new Date(year, month - 1, day, hour, min, sec)
-                }
+        if (!tags || Object.keys(tags).length === 0) {
+            console.log('📷 No EXIF data found in image')
+            return { date: null, gps: null }
+        }
 
-                // Extract GPS
-                let gps = null
-                const latDeg = exifData.GPSLatitude
-                const latRef = exifData.GPSLatitudeRef
-                const lngDeg = exifData.GPSLongitude
-                const lngRef = exifData.GPSLongitudeRef
+        // Extract date
+        let date = null
+        const exifData = tags.exif || {}
+        const dateTag = exifData.DateTimeOriginal || exifData.DateTime
+        if (dateTag && dateTag.description) {
+            console.log('📅 Found date string:', dateTag.description)
+            const dateStr = dateTag.description
+            // Format: "2024:01:31 14:30:00"
+            const [datePart, timePart] = dateStr.split(' ')
+            const [year, month, day] = datePart.split(':')
+            const [hour, min, sec] = timePart ? timePart.split(':') : [0, 0, 0]
+            date = new Date(year, month - 1, day, hour, min, sec)
+        }
 
-                if (latDeg && lngDeg) {
-                    console.log('📍 Found GPS data:', { latDeg, latRef, lngDeg, lngRef })
-                    const lat = convertDMSToDD(latDeg[0], latDeg[1], latDeg[2], latRef)
-                    const lng = convertDMSToDD(lngDeg[0], lngDeg[1], lngDeg[2], lngRef)
-                    gps = { lat, lng }
-                }
-
-                console.log('📋 Extracted EXIF:', { date, gps })
-                resolve({ date, gps })
-            } catch (error) {
-                console.warn('EXIF parsing error:', error)
-                resolve({ date: null, gps: null })
+        // Extract GPS
+        let gps = null
+        const gpsData = tags.gps || {}
+        if (gpsData.Latitude !== undefined && gpsData.Longitude !== undefined) {
+            console.log('📍 Found GPS data:', { lat: gpsData.Latitude, lng: gpsData.Longitude })
+            gps = {
+                lat: gpsData.Latitude,
+                lng: gpsData.Longitude
             }
         }
-        reader.onerror = () => {
-            console.warn('FileReader error')
-            resolve({ date: null, gps: null })
-        }
-        reader.readAsArrayBuffer(file)
-    })
+
+        console.log('📋 Extracted EXIF:', { date, gps })
+        return { date, gps }
+    } catch (error) {
+        console.warn('EXIF parsing error:', error)
+        return { date: null, gps: null }
+    }
 }
 
 /**
