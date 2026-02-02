@@ -179,14 +179,65 @@ function Report() {
                         setTimeout(() => setCurrentStep(2), 1000)
                     }
                 } else {
-                    // NO GPS
-                    console.log('📷 No GPS found in image EXIF.')
-                    setGpsError('❌ No GPS location found in image. Please ensure location services are enabled when taking the photo.')
-                    setVerificationResult(prev => ({
-                        ...prev,
-                        valid: false,
-                        errors: [...(prev?.errors || []), '❌ No GPS location found in image. Enable location on your camera and try again.']
-                    }))
+                    // NO GPS in image EXIF - Fallback to Device Geolocation
+                    console.log('📷 No GPS in EXIF. Attempting Device GPS...')
+                    setStatusMessage('Photo missing GPS tags. Trying Device GPS...')
+
+                    if (navigator.geolocation) {
+                        setGpsLoading(true)
+                        navigator.geolocation.getCurrentPosition(
+                            async (position) => {
+                                const { latitude, longitude } = position.coords
+                                console.log('📍 Device GPS acquired:', latitude, longitude)
+                                setStatusMessage('Device Location found! Fetching address...')
+
+                                // Reverse Geocode
+                                let address = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+                                try {
+                                    const response = await fetch(
+                                        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+                                    )
+                                    const data = await response.json()
+                                    if (data.display_name) address = data.display_name
+                                } catch (e) {
+                                    console.warn('Reverse geocoding failed', e)
+                                }
+
+                                setFormData(prev => ({
+                                    ...prev,
+                                    location: {
+                                        lat: latitude,
+                                        lng: longitude,
+                                        address
+                                    }
+                                }))
+                                setLocationFromPhoto(true)
+                                setGpsLoading(false)
+
+                                // Auto Advance
+                                setTimeout(() => setCurrentStep(2), 1000)
+                            },
+                            (error) => {
+                                console.error('Device GPS failed:', error)
+                                setGpsLoading(false)
+                                setGpsError('❌ Photo has no GPS and Device Location was denied/unavailable.')
+                                setVerificationResult(prev => ({
+                                    ...prev,
+                                    valid: false,
+                                    errors: [...(prev?.errors || []), '❌ No GPS found. Please enable location permissions.']
+                                }))
+                            },
+                            { enableHighAccuracy: true, timeout: 10000 }
+                        )
+                    } else {
+                        // No Geolocation API
+                        setGpsError('❌ No GPS location found in image and browser does not support geolocation.')
+                        setVerificationResult(prev => ({
+                            ...prev,
+                            valid: false,
+                            errors: [...(prev?.errors || []), '❌ No GPS location found.']
+                        }))
+                    }
                 }
             } catch (error) {
                 console.error('Verification error:', error)
