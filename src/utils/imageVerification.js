@@ -1,7 +1,106 @@
 // Image verification utilities for POFIX
 // Checks: AI content verification using TensorFlow.js MobileNet, GPS extraction
 
-import piexif from 'piexifjs'
+// Import ExifReader
+import ExifReader from 'exifreader'
+
+/**
+ * Extract EXIF data from image file using ExifReader
+ * @param {File} file - Image file
+ * @returns {Promise<{date: Date|null, gps: {lat: number, lng: number}|null}>}
+ */
+export async function extractExifData(file) {
+    try {
+        // ExifReader.load returns a Promise in newer versions or can be awaited
+        const tags = await ExifReader.load(file)
+        console.log('📷 ExifReader Tags:', tags)
+
+        if (!tags) return { date: null, gps: null }
+
+        // Extract Date
+        let date = null
+        // DateTimeOriginal is preferred
+        const dateTag = tags['DateTimeOriginal'] || tags['DateTimeDigitized'] || tags['DateTime']
+        if (dateTag && dateTag.description) {
+            // Format: "YYYY:MM:DD HH:MM:SS"
+            const dateStr = dateTag.description
+            console.log('📅 Found date string:', dateStr)
+            const [datePart, timePart] = dateStr.split(' ')
+            if (datePart && timePart) {
+                const [year, month, day] = datePart.split(':')
+                const [hour, min, sec] = timePart.split(':')
+                date = new Date(year, month - 1, day, hour, min, sec)
+            }
+        }
+
+        // Extract GPS
+        let gps = null
+        if (tags['GPSLatitude'] && tags['GPSLongitude']) {
+            const latRaw = tags['GPSLatitude'].value
+            const latRef = tags['GPSLatitudeRef'] ? tags['GPSLatitudeRef'].value[0] : ''
+            const lngRaw = tags['GPSLongitude'].value
+            const lngRef = tags['GPSLongitudeRef'] ? tags['GPSLongitudeRef'].value[0] : ''
+
+            // ExifReader usually normalizes 'value' to an array of numbers (decimal) if simple, 
+            // or 2D array [[num,den],...] if rational.
+            // But ExifReader v4 "description" often holds the decimal if configured? 
+            // Let's rely on standard DMS calculation from 'value'.
+
+            // Helper to get float from ExifReader value
+            const getFloat = (val) => {
+                if (typeof val === 'number') return val
+                // If array [num, den]
+                if (Array.isArray(val) && val.length === 2 && typeof val[1] === 'number' && val[1] !== 0) {
+                    return val[0] / val[1]
+                }
+                // If just array of one number
+                if (Array.isArray(val) && val.length === 1) return val[0]
+                return 0
+            }
+
+            try {
+                // Determine format based on first element
+                let lat, lng
+
+                // ExifReader typically returns [degrees, minutes, seconds] where each is a number or [num, den]
+                // We need to robustly handle this.
+                const convertToDd = (coords, ref) => {
+                    if (!Array.isArray(coords)) return null
+
+                    let d = getFloat(coords[0])
+                    let m = getFloat(coords[1])
+                    let s = getFloat(coords[2])
+
+                    let dd = d + m / 60 + s / 3600
+
+                    if (ref === 'S' || ref === 'W') dd = dd * -1
+                    return dd
+                }
+
+                lat = convertToDd(latRaw, latRef)
+                lng = convertToDd(lngRaw, lngRef)
+
+                console.log('📍 Calculated coordinates:', { lat, lng })
+
+                if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                    gps = { lat, lng }
+                }
+
+            } catch (err) {
+                console.warn('GPS Calculation Error:', err)
+            }
+        }
+
+        return { date, gps }
+
+    } catch (error) {
+        console.warn('ExifReader parsing error:', error)
+        return { date: null, gps: null }
+    }
+}
+
+// Helper removed as logic is inline
+// function convertDMSToDD... removed
 import * as tf from '@tensorflow/tfjs'
 import * as mobilenet from '@tensorflow-models/mobilenet'
 
@@ -201,105 +300,7 @@ function createImageElement(base64) {
  * @param {File} file - Image file
  * @returns {Promise<{date: Date|null, gps: {lat: number, lng: number}|null}>}
  */
-export function extractExifData(file) {
-    return new Promise((resolve) => {
-        const reader = new FileReader()
-        reader.onload = function (e) {
-            try {
-                const dataUrl = e.target.result
-                const exifObj = piexif.load(dataUrl)
-                console.log('📷 Raw EXIF data:', exifObj)
 
-                if (!exifObj || Object.keys(exifObj).length === 0) {
-                    console.log('📷 No EXIF data found in image')
-                    resolve({ date: null, gps: null })
-                    return
-                }
-
-                // Extract date from EXIF
-                let date = null
-                const exifData = exifObj['Exif'] || {}
-                const dateTag = exifData[piexif.ExifIFD.DateTimeOriginal] || exifData[piexif.ExifIFD.DateTimeDigitized]
-                if (dateTag) {
-                    console.log('📅 Found date string:', dateTag)
-                    const [datePart, timePart] = dateTag.split(' ')
-                    const [year, month, day] = datePart.split(':')
-                    const [hour, min, sec] = timePart ? timePart.split(':') : [0, 0, 0]
-                    date = new Date(year, month - 1, day, hour, min, sec)
-                }
-
-                // Extract GPS
-                let gps = null
-                const gpsData = exifObj['GPS'] || {}
-                console.log('📍 GPS Data object:', gpsData)
-
-                const latDeg = gpsData[piexif.GPSIFD.GPSLatitude]
-                const latRef = gpsData[piexif.GPSIFD.GPSLatitudeRef]
-                const lngDeg = gpsData[piexif.GPSIFD.GPSLongitude]
-                const lngRef = gpsData[piexif.GPSIFD.GPSLongitudeRef]
-
-                console.log('📍 Raw GPS values:', { latDeg, latRef, lngDeg, lngRef })
-
-                if (latDeg && lngDeg) {
-                    try {
-                        // piexif returns GPS as [[num, denom], [num, denom], [num, denom]]
-                        let lat, lng
-
-                        // Check if it's in rational format [num, denom] or just numbers
-                        if (Array.isArray(latDeg[0])) {
-                            // Rational format: [[deg_num, deg_denom], [min_num, min_denom], [sec_num, sec_denom]]
-                            lat = convertDMSToDD(
-                                latDeg[0][0] / latDeg[0][1],
-                                latDeg[1][0] / latDeg[1][1],
-                                latDeg[2][0] / latDeg[2][1],
-                                latRef
-                            )
-                            lng = convertDMSToDD(
-                                lngDeg[0][0] / lngDeg[0][1],
-                                lngDeg[1][0] / lngDeg[1][1],
-                                lngDeg[2][0] / lngDeg[2][1],
-                                lngRef
-                            )
-                        } else {
-                            // Simple array format: [deg, min, sec]
-                            lat = convertDMSToDD(latDeg[0], latDeg[1], latDeg[2], latRef)
-                            lng = convertDMSToDD(lngDeg[0], lngDeg[1], lngDeg[2], lngRef)
-                        }
-
-                        console.log('📍 Calculated coordinates:', { lat, lng })
-                        if (!isNaN(lat) && !isNaN(lng)) {
-                            gps = { lat, lng }
-                        }
-                    } catch (gpsError) {
-                        console.warn('GPS parsing error:', gpsError)
-                    }
-                }
-
-                console.log('📋 Extracted EXIF:', { date, gps })
-                resolve({ date, gps })
-            } catch (error) {
-                console.warn('EXIF parsing error:', error)
-                resolve({ date: null, gps: null })
-            }
-        }
-        reader.onerror = () => {
-            console.warn('FileReader error')
-            resolve({ date: null, gps: null })
-        }
-        reader.readAsDataURL(file)
-    })
-}
-
-/**
- * Convert DMS (degrees, minutes, seconds) to Decimal Degrees
- */
-function convertDMSToDD(degrees, minutes, seconds, direction) {
-    let dd = degrees + minutes / 60 + seconds / 3600
-    if (direction === 'S' || direction === 'W') {
-        dd = dd * -1
-    }
-    return dd
-}
 
 /**
  * Full image verification pipeline
