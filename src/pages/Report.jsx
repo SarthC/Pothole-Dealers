@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveReportToDatabase } from '../utils/realtimeDb'
-import { verifyImage, preloadModel } from '../utils/imageVerification'
+import { verifyImageWithAI, extractExifData, preloadModel } from '../utils/imageVerification'
 import MapPicker from '../components/MapPicker'
 import Stepper, { Step } from '../components/Stepper'
 import './Report.css'
@@ -70,6 +70,7 @@ function Report() {
     const [verificationResult, setVerificationResult] = useState(null)
     const [locationFromPhoto, setLocationFromPhoto] = useState(false)
     const [gpsError, setGpsError] = useState(null) // GPS error message
+    const [statusMessage, setStatusMessage] = useState('')
 
     // Pre-load MobileNet model when page loads (eliminates wait on image upload)
     useEffect(() => {
@@ -77,7 +78,7 @@ function Report() {
     }, [])
 
 
-    // Unified handler for both camera and gallery - extracts GPS from image EXIF
+    // Unified handler for camera - extracts GPS and verifies image content
     const handleImageUpload = async (e) => {
         const file = e.target.files[0]
         if (!file) return
@@ -87,6 +88,7 @@ function Report() {
         setVerificationResult(null)
         setLocationFromPhoto(false)
         setGpsError(null)
+        setStatusMessage('Platform is verifying your image...')
 
         // Read file as base64
         const reader = new FileReader()
@@ -99,16 +101,56 @@ function Report() {
                 imageFile: file
             }))
 
-            // Verify image and extract EXIF GPS
             try {
-                const result = await verifyImage(file)
+                // Step 1: AI Verification
+                // Small delay for UX so user sees the message
+                await new Promise(r => setTimeout(r, 600))
+
+                const aiResult = await verifyImageWithAI(base64Data)
+                if (!aiResult.valid) {
+                    setVerificationResult({
+                        valid: false,
+                        errors: [aiResult.message],
+                        aiResult
+                    })
+                    setVerifying(false)
+                    return
+                }
+
+                // Step 2: Extract GPS
+                setStatusMessage('Platform is detecting location...')
+                await new Promise(r => setTimeout(r, 600)) // UX delay
+
+                const exifData = await extractExifData(file)
+
+                // Check Photo Age (48h limit)
+                if (exifData.date) {
+                    const now = new Date()
+                    const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
+                    if (hoursDiff > 48) {
+                        setVerificationResult({
+                            valid: false,
+                            errors: [`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`]
+                        })
+                        setVerifying(false)
+                        return
+                    }
+                }
+
+                const result = {
+                    valid: true,
+                    exifData,
+                    aiResult
+                }
                 setVerificationResult(result)
 
-                // Check if GPS is available in EXIF (where photo was actually taken)
-                if (result.exifData?.gps) {
-                    const { lat, lng } = result.exifData.gps
+                // Check GPS
+                if (exifData?.gps) {
+                    const { lat, lng } = exifData.gps
                     console.log('📍 GPS extracted from image EXIF:', lat, lng)
-                    // Reverse geocode the GPS coordinates
+                    setStatusMessage('Location found! Fetching address...')
+
+                    // Reverse geocode
                     try {
                         const response = await fetch(
                             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
@@ -123,28 +165,23 @@ function Report() {
                             }
                         }))
                         setLocationFromPhoto(true)
-
-                        // Verification Successful - Auto Advance to Step 2
-                        setTimeout(() => setCurrentStep(2), 1500)
+                        setTimeout(() => setCurrentStep(2), 1000)
                     } catch {
                         setFormData(prev => ({
                             ...prev,
                             location: {
-                                lat,
-                                lng,
+                                lat: lat,
+                                lng: lng,
                                 address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`
                             }
                         }))
                         setLocationFromPhoto(true)
-
-                        // Verification Successful - Auto Advance to Step 2
-                        setTimeout(() => setCurrentStep(2), 1500)
+                        setTimeout(() => setCurrentStep(2), 1000)
                     }
                 } else {
-                    // NO GPS in image - reject the upload
-                    console.log('📷 No GPS found in image EXIF. Upload blocked.')
+                    // NO GPS
+                    console.log('📷 No GPS found in image EXIF.')
                     setGpsError('❌ No GPS location found in image. Please ensure location services are enabled when taking the photo.')
-                    // Mark as invalid since GPS is required
                     setVerificationResult(prev => ({
                         ...prev,
                         valid: false,
@@ -155,11 +192,11 @@ function Report() {
                 console.error('Verification error:', error)
                 setVerificationResult({
                     valid: false,
-                    warnings: [],
                     errors: ['Could not verify image. Please ensure this is a valid pothole photo with GPS data.']
                 })
             } finally {
                 setVerifying(false)
+                setStatusMessage('')
             }
         }
         reader.readAsDataURL(file)
@@ -423,7 +460,7 @@ function Report() {
                                 {/* Verification Feedback */}
                                 {verifying && (
                                     <div className="verification-status verifying">
-                                        <span className="spinner"></span> Verifying Pothole & GPS...
+                                        <span className="spinner"></span> {statusMessage || 'Verifying...'}
                                     </div>
                                 )}
                                 {verificationResult && !verifying && (
