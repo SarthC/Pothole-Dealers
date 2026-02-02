@@ -321,32 +321,78 @@ function Report() {
                 <form onSubmit={handleSubmit} className="report-form">
                     <div className="form-section">
                         <h3>1. Upload Photo</h3>
-                        <div
-                            className={`image-upload ${preview ? 'has-image' : ''}`}
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                            {preview ? (
+
+                        {/* Image Preview Area */}
+                        {preview && (
+                            <div className="image-upload has-image">
                                 <img ref={previewImgRef} src={preview} alt="Pothole preview" className="image-preview" crossOrigin="anonymous" />
-                            ) : (
-                                <div className="upload-placeholder">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            </div>
+                        )}
+
+                        {/* Camera and Gallery Buttons */}
+                        {!preview && (
+                            <div className="upload-buttons">
+                                <button
+                                    type="button"
+                                    className="btn btn-primary upload-btn"
+                                    onClick={() => document.getElementById('camera-input').click()}
+                                >
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                        <circle cx="12" cy="13" r="4" />
+                                    </svg>
+                                    Take Photo
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary upload-btn"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                         <rect x="3" y="3" width="18" height="18" rx="2" />
                                         <circle cx="8.5" cy="8.5" r="1.5" />
                                         <path d="M21 15l-5-5L5 21" />
                                     </svg>
-                                    <span>Tap to take photo or upload</span>
-                                    <span className="upload-hint">JPG, PNG up to 10MB (taken within last 48 hours)</span>
-                                </div>
-                            )}
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                accept="image/*"
-                                capture="environment"
-                                onChange={handleImageUpload}
-                                className="hidden"
-                            />
-                        </div>
+                                    Upload from Gallery
+                                </button>
+                            </div>
+                        )}
+
+                        {preview && (
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setPreview(null)
+                                    setVerificationResult(null)
+                                    setFormData(prev => ({ ...prev, imageUrl: '', imageFile: null }))
+                                }}
+                                style={{ marginTop: '1rem' }}
+                            >
+                                Change Photo
+                            </button>
+                        )}
+
+                        <span className="upload-hint" style={{ display: 'block', marginTop: '0.5rem', textAlign: 'center' }}>
+                            JPG, PNG up to 10MB (taken within last 48 hours)
+                        </span>
+
+                        {/* Hidden file inputs */}
+                        <input
+                            type="file"
+                            id="camera-input"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleImageUpload}
+                            style={{ display: 'none' }}
+                        />
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                        />
 
                         {/* Verification Feedback */}
                         {verifying && (
@@ -487,7 +533,7 @@ function Report() {
                         {isSubmitting ? 'Submitting...' : 'Submit Report'}
                     </button>
                 </form>
-            </div>
+            </div >
 
             {showMap && (
                 <MapPicker
@@ -495,8 +541,9 @@ function Report() {
                     onClose={() => setShowMap(false)}
                     initialLocation={formData.location}
                 />
-            )}
-        </div>
+            )
+            }
+        </div >
     )
 }
 
