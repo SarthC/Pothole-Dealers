@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveReportToDatabase } from '../utils/realtimeDb'
-import { verifyImage } from '../utils/imageVerification'
+import { verifyImage, preloadModel } from '../utils/imageVerification'
 import MapPicker from '../components/MapPicker'
 import './Report.css'
 
@@ -65,6 +65,11 @@ function Report() {
     const [verifying, setVerifying] = useState(false)
     const [verificationResult, setVerificationResult] = useState(null)
     const [locationFromPhoto, setLocationFromPhoto] = useState(false)
+
+    // Pre-load MobileNet model when page loads (eliminates wait on image upload)
+    useEffect(() => {
+        preloadModel()
+    }, [])
 
 
     const handleImageUpload = async (e) => {
@@ -329,7 +334,7 @@ function Report() {
                                         <circle cx="8.5" cy="8.5" r="1.5" />
                                         <path d="M21 15l-5-5L5 21" />
                                     </svg>
-                                    <span>Click to upload image</span>
+                                    <span>Tap to take photo or upload</span>
                                     <span className="upload-hint">JPG, PNG up to 10MB (taken within last 48 hours)</span>
                                 </div>
                             )}
@@ -337,6 +342,7 @@ function Report() {
                                 type="file"
                                 ref={fileInputRef}
                                 accept="image/*"
+                                capture="environment"
                                 onChange={handleImageUpload}
                                 className="hidden"
                             />

@@ -47,7 +47,14 @@ const REJECT_KEYWORDS = [
     'diagram', 'flowchart', 'chart', 'graph', 'menu', 'web', 'website', 'comic',
     'envelope', 'packet', 'notebook', 'binder', 'folder', 'letter',
     // Nature (not road)
-    'flower', 'tree', 'plant', 'forest', 'ocean', 'beach', 'mountain', 'sky', 'cloud'
+    'flower', 'tree', 'plant', 'forest', 'ocean', 'beach', 'mountain', 'sky', 'cloud',
+    // Fictional / Art / Costumes (Fix for Superman/Spiderman)
+    'mask', 'costume', 'cape', 'suit', 'helmet', 'uniform', 'jersey',
+    'toy', 'doll', 'action figure', 'robot', 'figurine', 'lego',
+    'art', 'painting', 'drawing', 'sketch', 'illustration', 'cartoon', 'anime', 'animation',
+    'comic', 'poster', 'flyer', 'banner', 'graffiti',
+    'space', 'astronaut', 'planet', 'galaxy', 'star', 'rocket',
+    'spider', 'web', 'wing', 'monster', 'alien'
 ]
 
 /**
@@ -59,6 +66,19 @@ async function loadModel() {
     cachedModel = await mobilenet.load()
     console.log('✅ MobileNet model loaded')
     return cachedModel
+}
+
+/**
+ * Pre-load the MobileNet model in the background
+ * Call this when the Report page mounts to eliminate wait time on image upload
+ */
+export async function preloadModel() {
+    try {
+        await loadModel()
+        console.log('🚀 MobileNet model pre-loaded and ready!')
+    } catch (error) {
+        console.warn('⚠️ Failed to pre-load model:', error)
+    }
 }
 
 /**
@@ -183,56 +203,57 @@ function createImageElement(base64) {
  */
 export function extractExifData(file) {
     return new Promise((resolve) => {
+        // Read file as ArrayBuffer for reliable EXIF extraction
         const reader = new FileReader()
         reader.onload = (e) => {
-            const img = new Image()
-            img.onload = () => {
-                try {
-                    EXIF.getData(img, function () {
-                        try {
-                            // Extract date
-                            const dateStr = EXIF.getTag(this, 'DateTimeOriginal')
-                            let date = null
-                            if (dateStr) {
-                                const [datePart, timePart] = dateStr.split(' ')
-                                const [year, month, day] = datePart.split(':')
-                                const [hour, min, sec] = timePart.split(':')
-                                date = new Date(year, month - 1, day, hour, min, sec)
-                            }
+            try {
+                // Parse EXIF directly from ArrayBuffer
+                const exifData = EXIF.readFromBinaryFile(e.target.result)
+                console.log('📷 Raw EXIF data:', exifData)
 
-                            // Extract GPS
-                            let gps = null
-                            const latDeg = EXIF.getTag(this, 'GPSLatitude')
-                            const latRef = EXIF.getTag(this, 'GPSLatitudeRef')
-                            const lngDeg = EXIF.getTag(this, 'GPSLongitude')
-                            const lngRef = EXIF.getTag(this, 'GPSLongitudeRef')
-
-                            if (latDeg && lngDeg) {
-                                const lat = convertDMSToDD(latDeg[0], latDeg[1], latDeg[2], latRef)
-                                const lng = convertDMSToDD(lngDeg[0], lngDeg[1], lngDeg[2], lngRef)
-                                gps = { lat, lng }
-                            }
-
-                            resolve({ date, gps })
-                        } catch (innerError) {
-                            console.warn('EXIF parsing error:', innerError)
-                            resolve({ date: null, gps: null })
-                        }
-                    })
-                } catch (error) {
-                    console.warn('EXIF getData error:', error)
+                if (!exifData) {
+                    console.log('📷 No EXIF data found in image')
                     resolve({ date: null, gps: null })
+                    return
                 }
-            }
-            img.onerror = () => {
+
+                // Extract date
+                let date = null
+                const dateStr = exifData.DateTimeOriginal || exifData.DateTime
+                if (dateStr) {
+                    console.log('📅 Found date string:', dateStr)
+                    const [datePart, timePart] = dateStr.split(' ')
+                    const [year, month, day] = datePart.split(':')
+                    const [hour, min, sec] = timePart ? timePart.split(':') : [0, 0, 0]
+                    date = new Date(year, month - 1, day, hour, min, sec)
+                }
+
+                // Extract GPS
+                let gps = null
+                const latDeg = exifData.GPSLatitude
+                const latRef = exifData.GPSLatitudeRef
+                const lngDeg = exifData.GPSLongitude
+                const lngRef = exifData.GPSLongitudeRef
+
+                if (latDeg && lngDeg) {
+                    console.log('📍 Found GPS data:', { latDeg, latRef, lngDeg, lngRef })
+                    const lat = convertDMSToDD(latDeg[0], latDeg[1], latDeg[2], latRef)
+                    const lng = convertDMSToDD(lngDeg[0], lngDeg[1], lngDeg[2], lngRef)
+                    gps = { lat, lng }
+                }
+
+                console.log('📋 Extracted EXIF:', { date, gps })
+                resolve({ date, gps })
+            } catch (error) {
+                console.warn('EXIF parsing error:', error)
                 resolve({ date: null, gps: null })
             }
-            img.src = e.target.result
         }
         reader.onerror = () => {
+            console.warn('FileReader error')
             resolve({ date: null, gps: null })
         }
-        reader.readAsDataURL(file)
+        reader.readAsArrayBuffer(file)
     })
 }
 
@@ -262,16 +283,25 @@ export async function verifyImage(file) {
         aiResult: null
     }
 
-    // Step 1: Extract EXIF data
+    // Step 1: Extract EXIF data and validate timestamp
     console.log('🔍 Extracting EXIF data...')
     const exifData = await extractExifData(file)
     result.exifData = exifData
     console.log('📋 EXIF data:', exifData)
 
-    // STRICT CHECK REMOVED: Allow images without EXIF to proceed (fallback to device GPS)
-    // if (!exifData.date && !exifData.gps) { ... }
+    if (exifData.date) {
+        const now = new Date()
+        const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
+        console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours`)
 
-    // Step 2: AI-based content verification
+        if (hoursDiff > 48) {
+            result.valid = false
+            result.errors.push(`❌ Image rejected: Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`)
+            return result
+        }
+    }
+
+    // Step 2: AI-based content verification (Is it a pothole/road image?)
     console.log('🤖 Running AI verification...')
     const base64 = await fileToBase64(file)
     const aiResult = await verifyImageWithAI(base64)
@@ -281,9 +311,6 @@ export async function verifyImage(file) {
     if (!aiResult.valid) {
         result.valid = false
         result.errors.push(aiResult.message)
-    } else if (aiResult.confidence < 0.5) {
-        // Just a warning if low confidence but matched
-        // result.warnings.push(aiResult.message)
     }
 
     console.log('📋 Final verification result:', result)
