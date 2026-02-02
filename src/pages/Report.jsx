@@ -335,17 +335,6 @@ function Report() {
                                 <button
                                     type="button"
                                     className="btn btn-primary upload-btn"
-                                    onClick={() => document.getElementById('camera-input').click()}
-                                >
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                                        <circle cx="12" cy="13" r="4" />
-                                    </svg>
-                                    Take Photo
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary upload-btn"
                                     onClick={() => fileInputRef.current?.click()}
                                 >
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -353,7 +342,7 @@ function Report() {
                                         <circle cx="8.5" cy="8.5" r="1.5" />
                                         <path d="M21 15l-5-5L5 21" />
                                     </svg>
-                                    Upload from Gallery
+                                    Upload Photo
                                 </button>
                             </div>
                         )}
@@ -373,19 +362,20 @@ function Report() {
                             </button>
                         )}
 
-                        <span className="upload-hint" style={{ display: 'block', marginTop: '0.5rem', textAlign: 'center' }}>
-                            JPG, PNG up to 10MB (taken within last 48 hours)
-                        </span>
+                        <div className="upload-instructions" style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '8px', fontSize: '0.9rem' }}>
+                            <strong>📸 How to upload:</strong>
+                            <ol style={{ margin: '0.5rem 0 0 1.2rem', padding: 0 }}>
+                                <li>Open your phone's <strong>Camera app</strong></li>
+                                <li>Take a photo of the pothole</li>
+                                <li>Come back here and tap <strong>"Upload Photo"</strong></li>
+                                <li>Select the photo from your gallery</li>
+                            </ol>
+                            <p style={{ margin: '0.5rem 0 0 0', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                ⚠️ Photos must be taken with location enabled and within last 48 hours.
+                            </p>
+                        </div>
 
-                        {/* Hidden file inputs */}
-                        <input
-                            type="file"
-                            id="camera-input"
-                            accept="image/*"
-                            capture="environment"
-                            onChange={handleImageUpload}
-                            style={{ display: 'none' }}
-                        />
+                        {/* Hidden file input */}
                         <input
                             type="file"
                             ref={fileInputRef}
