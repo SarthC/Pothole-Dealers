@@ -274,45 +274,29 @@ export async function verifyImage(file) {
         aiResult: null
     }
 
-    // Step 1: Extract EXIF data
+    // Step 1: Extract EXIF data (optional - will fallback to device GPS if not available)
     console.log('🔍 Extracting EXIF data...')
     const exifData = await extractExifData(file)
     result.exifData = exifData
     console.log('📋 EXIF data:', exifData)
 
-    // STRICT CHECK: Require EXIF data to exist
-    if (!exifData.date && !exifData.gps) {
-        result.valid = false
-        result.errors.push('❌ No EXIF data found. Please use a photo taken directly from your camera. Screenshots, downloaded images, or photos shared via messaging apps do not contain the required metadata.')
-        return result
+    // Flag to indicate if we need device GPS
+    result.requireDeviceGps = !exifData.gps
+
+    // Optional: Check 48-hour limit if EXIF date is available
+    if (exifData.date) {
+        const now = new Date()
+        const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
+        console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours`)
+
+        if (hoursDiff > 48) {
+            result.valid = false
+            result.errors.push(`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`)
+            return result
+        }
     }
 
-    // STRICT CHECK: Require timestamp in EXIF
-    if (!exifData.date) {
-        result.valid = false
-        result.errors.push('❌ No timestamp found in photo. Please use an original photo taken directly from your camera app.')
-        return result
-    }
-
-    // STRICT CHECK: Validate 48-hour limit
-    const now = new Date()
-    const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
-    console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours`)
-
-    if (hoursDiff > 48) {
-        result.valid = false
-        result.errors.push(`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted to ensure current road conditions.`)
-        return result
-    }
-
-    // STRICT CHECK: Require GPS location in EXIF
-    if (!exifData.gps) {
-        result.valid = false
-        result.errors.push('❌ No GPS location found in photo. Please enable location services in your camera app and take a new photo.')
-        return result
-    }
-
-    // Step 2: AI-based content verification (Is it a pothole/road image?)
+    // Step 2: AI-based content verification (Is it a pothole/road image?) - REQUIRED
     console.log('🤖 Running AI verification...')
     const base64 = await fileToBase64(file)
     const aiResult = await verifyImageWithAI(base64)
@@ -325,7 +309,7 @@ export async function verifyImage(file) {
         return result
     }
 
-    console.log('✅ All verification checks passed!')
+    console.log('✅ AI verification passed!')
     console.log('📋 Final verification result:', result)
     return result
 }
