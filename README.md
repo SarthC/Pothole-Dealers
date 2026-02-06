@@ -93,4 +93,8 @@ To prevent misinformation and abuse:
 ---
 
 ## 📄 License
-This project is licensed under the **MIT License**.
+**© 2026 Sarth. All Rights Reserved.**
+
+This project is proprietary software. You may access and use the POFIX platform through its official interface, but you may **not** copy, modify, distribute, or create derivative works from the source code without explicit permission from the copyright holder.
+
+See the [LICENSE](./LICENSE) file for full terms.

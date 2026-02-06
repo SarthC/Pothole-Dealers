@@ -291,3 +291,110 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Heatmap Section */
+.heatmap-section {
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    padding: var(--space-5);
+    margin-bottom: var(--space-6);
+}
+
+.heatmap-section h3 {
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--space-1);
+}
+
+.heatmap-subtitle {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+}
+
+.heatmap-controls {
+    display: flex;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.heatmap-search {
+    flex: 1;
+    min-width: 200px;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.heatmap-search:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.btn-my-location {
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    transition: background 0.2s;
+}
+
+.btn-my-location:hover {
+    background: var(--color-accent-hover, #4f46e5);
+}
+
+.heatmap-container {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+}
+
+.heatmap-container .leaflet-container {
+    background: #1a1a2e;
+}
+
+.heatmap-legend {
+    display: flex;
+    gap: var(--space-4);
+    justify-content: center;
+    margin-top: var(--space-4);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.legend-item .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.legend-item .dot.green {
+    background: #2ecc71;
+}
+
+.legend-item .dot.yellow {
+    background: #f1c40f;
+}
+
+.legend-item .dot.orange {
+    background: #e67e22;
+}
+
+.legend-item .dot.red {
+    background: #e74c3c;
+}

@@ -72,17 +72,153 @@ function Report() {
     const [gpsError, setGpsError] = useState(null) // GPS error message
     const [statusMessage, setStatusMessage] = useState('')
 
+    // Webcam State & Refs
+    const [showCamera, setShowCamera] = useState(false)
+    const videoRef = useRef(null)
+    const streamRef = useRef(null)
+
+    const startCamera = async () => {
+        try {
+            setShowCamera(true)
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' }
+            })
+            // Small delay to ensure modal is rendered and ref is attached
+            setTimeout(() => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream
+                    streamRef.current = stream
+                }
+            }, 100)
+        } catch (err) {
+            console.error("Camera error:", err)
+            alert("Could not access camera. Please check permissions or use Upload instead.")
+            setShowCamera(false)
+        }
+    }
+
+    const stopCamera = () => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop())
+            streamRef.current = null
+        }
+        setShowCamera(false)
+    }
+
+    const capturePhoto = () => {
+        if (!videoRef.current) return
+
+        const canvas = document.createElement('canvas')
+        canvas.width = videoRef.current.videoWidth
+        canvas.height = videoRef.current.videoHeight
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(videoRef.current, 0, 0)
+
+        canvas.toBlob(blob => {
+            const file = new File([blob], "webcam_capture.jpg", { type: "image/jpeg" })
+            processImageFile(file, true) // Treat as camera source
+            stopCamera()
+        }, 'image/jpeg')
+    }
+
     // Pre-load MobileNet model when page loads (eliminates wait on image upload)
     useEffect(() => {
         preloadModel()
     }, [])
 
+    // Helper: Get device GPS location
+    const getDeviceLocation = () => {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) {
+                setGpsError('❌ Browser does not support geolocation.')
+                setVerificationResult(prev => ({
+                    ...prev,
+                    valid: false,
+                    errors: [...(prev?.errors || []), '❌ Geolocation not supported.']
+                }))
+                setVerifying(false)
+                resolve(false)
+                return
+            }
 
-    // Unified handler for camera - extracts GPS and verifies image content
-    const handleImageUpload = async (e) => {
-        const file = e.target.files[0]
-        if (!file) return
+            setGpsLoading(true)
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude } = position.coords
+                    console.log('📍 Device GPS acquired:', latitude, longitude)
+                    setStatusMessage('Location found! Fetching address...')
 
+                    // Reverse Geocode
+                    let address = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+                    try {
+                        const response = await fetch(
+                            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+                        )
+                        const data = await response.json()
+                        if (data.display_name) address = data.display_name
+                    } catch (e) {
+                        console.warn('Reverse geocoding failed', e)
+                    }
+
+                    setFormData(prev => ({
+                        ...prev,
+                        location: { lat: latitude, lng: longitude, address }
+                    }))
+                    setVerificationResult(prev => ({
+                        ...(prev || {}),
+                        valid: true
+                    }))
+                    setLocationFromPhoto(true)
+                    setGpsLoading(false)
+                    setVerifying(false)
+                    setTimeout(() => setCurrentStep(2), 800)
+                    resolve(true)
+                },
+                (error) => {
+                    console.error('Device GPS failed:', error)
+                    setGpsLoading(false)
+                    setGpsError('❌ Location access denied. Please enable location permissions.')
+                    setVerificationResult(prev => ({
+                        ...prev,
+                        valid: false,
+                        errors: [...(prev?.errors || []), '❌ Location access denied.']
+                    }))
+                    setVerifying(false)
+                    resolve(false)
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            )
+        })
+    }
+
+    // Helper: Use EXIF GPS coordinates
+    const useExifGps = async (gps) => {
+        const { lat, lng } = gps
+        console.log('📍 Using EXIF GPS:', lat, lng)
+        setStatusMessage('Location found! Fetching address...')
+
+        let address = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+            )
+            const data = await response.json()
+            if (data.display_name) address = data.display_name
+        } catch (e) {
+            console.warn('Reverse geocoding failed', e)
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            location: { lat, lng, address }
+        }))
+        setLocationFromPhoto(true)
+        setVerifying(false)
+        setTimeout(() => setCurrentStep(2), 800)
+    }
+
+    // Unified image processing function (works for both file input and webcam)
+    const processImageFile = async (file, isFromCamera) => {
         // Reset states
         setVerifying(true)
         setVerificationResult(null)
@@ -117,141 +253,74 @@ function Report() {
                     return
                 }
 
-                // Step 2: Extract GPS
+                // Step 2: Get Location
                 setStatusMessage('Platform is detecting location...')
-                await new Promise(r => setTimeout(r, 600)) // UX delay
+                await new Promise(r => setTimeout(r, 400)) // UX delay
 
-                const exifData = await extractExifData(file)
-
-                // Check Photo Age (48h limit)
-                if (exifData.date) {
-                    const now = new Date()
-                    const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
-                    if (hoursDiff > 48) {
-                        setVerificationResult({
-                            valid: false,
-                            errors: [`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`]
-                        })
-                        setVerifying(false)
-                        return
-                    }
-                }
-
-                const result = {
-                    valid: true,
-                    exifData,
-                    aiResult
-                }
-                setVerificationResult(result)
-
-                // Check GPS
-                if (exifData?.gps) {
-                    const { lat, lng } = exifData.gps
-                    console.log('📍 GPS extracted from image EXIF:', lat, lng)
-                    setStatusMessage('Location found! Fetching address...')
-
-                    // Reverse geocode
-                    try {
-                        const response = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-                        )
-                        const data = await response.json()
-                        setFormData(prev => ({
-                            ...prev,
-                            location: {
-                                lat,
-                                lng,
-                                address: data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-                            }
-                        }))
-                        setLocationFromPhoto(true)
-                        setTimeout(() => setCurrentStep(2), 1000)
-                    } catch {
-                        setFormData(prev => ({
-                            ...prev,
-                            location: {
-                                lat: lat,
-                                lng: lng,
-                                address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-                            }
-                        }))
-                        setLocationFromPhoto(true)
-                        setTimeout(() => setCurrentStep(2), 1000)
-                    }
+                if (isFromCamera) {
+                    // CAMERA (Phone or Laptop Webcam): Always use device GPS
+                    console.log('📍 Camera/Webcam photo - using Device GPS directly')
+                    await getDeviceLocation()
                 } else {
-                    // NO GPS in image EXIF - Fallback to Device Geolocation
-                    console.log('📷 No GPS in EXIF. Attempting Device GPS...')
-                    setStatusMessage('Photo missing GPS tags. Trying Device GPS...')
+                    // GALLERY: Try EXIF first, fallback to device GPS
+                    console.log('📍 Gallery photo - trying EXIF GPS first')
+                    const exifData = await extractExifData(file)
 
-                    if (navigator.geolocation) {
-                        setGpsLoading(true)
-                        navigator.geolocation.getCurrentPosition(
-                            async (position) => {
-                                const { latitude, longitude } = position.coords
-                                console.log('📍 Device GPS acquired:', latitude, longitude)
-                                setStatusMessage('Device Location found! Fetching address...')
+                    // Check Photo Age (48h limit)
+                    if (exifData.date) {
+                        const now = new Date()
+                        const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
+                        if (hoursDiff > 48) {
+                            setVerificationResult({
+                                valid: false,
+                                errors: [`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`]
+                            })
+                            setVerifying(false)
+                            return
+                        }
+                    }
 
-                                // Reverse Geocode
-                                let address = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
-                                try {
-                                    const response = await fetch(
-                                        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-                                    )
-                                    const data = await response.json()
-                                    if (data.display_name) address = data.display_name
-                                } catch (e) {
-                                    console.warn('Reverse geocoding failed', e)
-                                }
+                    const result = {
+                        valid: true,
+                        exifData,
+                        aiResult
+                    }
+                    setVerificationResult(result)
 
-                                setFormData(prev => ({
-                                    ...prev,
-                                    location: {
-                                        lat: latitude,
-                                        lng: longitude,
-                                        address
-                                    }
-                                }))
-                                setLocationFromPhoto(true)
-                                setGpsLoading(false)
-
-                                // Auto Advance
-                                setTimeout(() => setCurrentStep(2), 1000)
-                            },
-                            (error) => {
-                                console.error('Device GPS failed:', error)
-                                setGpsLoading(false)
-                                setGpsError('❌ Photo has no GPS and Device Location was denied/unavailable.')
-                                setVerificationResult(prev => ({
-                                    ...prev,
-                                    valid: false,
-                                    errors: [...(prev?.errors || []), '❌ No GPS found. Please enable location permissions.']
-                                }))
-                            },
-                            { enableHighAccuracy: true, timeout: 10000 }
-                        )
+                    if (exifData?.gps && !isNaN(exifData.gps.lat) && !isNaN(exifData.gps.lng)) {
+                        // EXIF GPS found - use it
+                        await useExifGps(exifData.gps)
                     } else {
-                        // No Geolocation API
-                        setGpsError('❌ No GPS location found in image and browser does not support geolocation.')
-                        setVerificationResult(prev => ({
-                            ...prev,
-                            valid: false,
-                            errors: [...(prev?.errors || []), '❌ No GPS location found.']
-                        }))
+                        // No EXIF GPS - fallback to device GPS
+                        console.log('📷 No GPS in EXIF. Fallback to Device GPS...')
+                        setStatusMessage('No GPS in photo. Using device location...')
+                        await getDeviceLocation()
                     }
                 }
             } catch (error) {
                 console.error('Verification error:', error)
                 setVerificationResult({
                     valid: false,
-                    errors: ['Could not verify image. Please ensure this is a valid pothole photo with GPS data.']
+                    errors: ['Could not verify image. Please try again.']
                 })
-            } finally {
                 setVerifying(false)
-                setStatusMessage('')
             }
         }
         reader.readAsDataURL(file)
     }
+
+    // Unified handler for file inputs (camera/gallery)
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        // Check if this came from camera input (has capture attribute) or gallery
+        const isFromCamera = e.target.hasAttribute('capture')
+        console.log('📸 Upload source:', isFromCamera ? 'Camera' : 'Gallery')
+
+        await processImageFile(file, isFromCamera)
+    }
+
 
 
     const handleGetLocation = () => {
@@ -451,22 +520,32 @@ function Report() {
                                     </div>
                                 )}
 
-                                {/* Camera Button Only */}
+                                {/* Camera and Gallery Buttons */}
                                 {!preview && (
-                                    <div className="upload-buttons" style={{ justifyContent: 'center' }}>
+                                    <div className="upload-buttons">
                                         <button
                                             type="button"
                                             className="btn btn-primary upload-btn"
-                                            onClick={() => document.getElementById('camera-input').click()}
-                                            style={{ minWidth: '200px' }}
+                                            onClick={startCamera}
                                         >
                                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                                                 <circle cx="12" cy="13" r="4" />
                                             </svg>
-                                            Take Photo (Camera Only)
+                                            Take Photo
                                         </button>
-                                        {/* Gallery Upload Removed as per request */}
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary upload-btn"
+                                            onClick={() => fileInputRef.current?.click()}
+                                        >
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <path d="M21 15l-5-5L5 21" />
+                                            </svg>
+                                            Upload from Gallery
+                                        </button>
                                     </div>
                                 )}
 
@@ -487,8 +566,15 @@ function Report() {
                                     </button>
                                 )}
 
+                                {/* Verification Status - Show while verifying */}
+                                {verifying && (
+                                    <div className="verification-status verifying" style={{ marginTop: '1rem' }}>
+                                        <span className="spinner"></span> {statusMessage || 'Verifying image...'}
+                                    </div>
+                                )}
+
                                 <p className="upload-hint" style={{ textAlign: 'center', marginTop: '1rem' }}>
-                                    📷 Must contain GPS data. AI will verify text/pothole.
+                                    📷 Must contain GPS data. AI will verify pothole.
                                 </p>
 
                                 {/* Hidden file inputs */}
@@ -508,12 +594,7 @@ function Report() {
                                     className="hidden"
                                 />
 
-                                {/* Verification Feedback */}
-                                {verifying && (
-                                    <div className="verification-status verifying">
-                                        <span className="spinner"></span> {statusMessage || 'Verifying...'}
-                                    </div>
-                                )}
+                                {/* Verification Feedback (Errors/Success) */}
                                 {verificationResult && !verifying && (
                                     <div className={`verification-status ${verificationResult.valid ? 'valid' : 'invalid'}`}>
                                         {verificationResult.errors?.map((err, i) => (
@@ -679,6 +760,73 @@ function Report() {
                             </div>
                         </Step>
                     </Stepper>
+
+
+
+                    {/* Camera Modal Overlay */}
+                    {showCamera && (
+                        <div className="camera-modal" style={{
+                            position: 'fixed',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            background: '#000',
+                            zIndex: 9999,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            ></video>
+
+                            <div className="camera-controls" style={{
+                                position: 'absolute',
+                                bottom: '2rem',
+                                left: 0,
+                                right: 0,
+                                display: 'flex',
+                                justifyContent: 'space-around',
+                                alignItems: 'center',
+                                padding: '0 2rem'
+                            }}>
+                                <button
+                                    type="button"
+                                    onClick={stopCamera}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.2)',
+                                        color: '#fff',
+                                        border: 'none',
+                                        padding: '1rem',
+                                        borderRadius: '50%',
+                                        width: '60px',
+                                        height: '60px',
+                                        fontSize: '1.5rem',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}
+                                >
+                                    ✕
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={capturePhoto}
+                                    style={{
+                                        background: '#fff',
+                                        border: '4px solid #ddd',
+                                        borderRadius: '50%',
+                                        width: '80px',
+                                        height: '80px'
+                                    }}
+                                ></button>
+
+                                <div style={{ width: '60px' }}></div> {/* Spacer for alignment */}
+                            </div>
+                        </div>
+                    )}
+
                 </form>
             </div >
 

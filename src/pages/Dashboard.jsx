@@ -1,9 +1,70 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getReportsFromDatabase, updateReportStatusDatabase } from '../utils/realtimeDb'
 import { getAllContractorsWithStats } from '../utils/contractorService'
 import PotholeCard from '../components/PotholeCard'
+import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet.heat'
 import './Dashboard.css'
+
+// Custom Heatmap Layer component for react-leaflet
+function HeatmapLayer({ points }) {
+    const map = useMap()
+    const heatLayerRef = useRef(null)
+
+    useEffect(() => {
+        if (!map || !points.length) return
+
+        // Remove existing layer
+        if (heatLayerRef.current) {
+            map.removeLayer(heatLayerRef.current)
+        }
+
+        // Create heatmap layer
+        heatLayerRef.current = L.heatLayer(points, {
+            radius: 25,
+            blur: 15,
+            maxZoom: 17,
+            max: 1.0,
+            gradient: {
+                0.2: '#2ecc71',  // Green (low)
+                0.4: '#f1c40f',  // Yellow
+                0.6: '#e67e22',  // Orange
+                0.8: '#e74c3c',  // Red (high)
+                1.0: '#9b59b6'   // Purple (critical)
+            }
+        }).addTo(map)
+
+        return () => {
+            if (heatLayerRef.current) {
+                map.removeLayer(heatLayerRef.current)
+            }
+        }
+    }, [map, points])
+
+    return null
+}
+
+// Component to fly to a location when triggered via custom event
+function FlyToLocation() {
+    const map = useMap()
+
+    useEffect(() => {
+        const handleFly = (e) => {
+            const { lat, lng } = e.detail
+            if (lat && lng) {
+                map.flyTo([lat, lng], 15, { duration: 1.5 })
+            }
+        }
+
+        window.addEventListener('flyToLocation', handleFly)
+        return () => window.removeEventListener('flyToLocation', handleFly)
+    }, [map])
+
+    return null
+}
 
 function Dashboard() {
     const navigate = useNavigate()
@@ -236,6 +297,146 @@ function Dashboard() {
                                 <span className="stat-label">Fixed</span>
                             </div>
                         </div>
+
+                        {/* Heatmap Section */}
+                        {(() => {
+                            // All reports with valid coordinates
+                            const allReportsWithCoords = reports.filter(r => r.location?.lat && r.location?.lng)
+                            const activeReports = allReportsWithCoords.filter(r => r.status !== 'resolved')
+                            const resolvedReports = allReportsWithCoords.filter(r => r.status === 'resolved')
+
+                            console.log('📊 Heatmap Data:', { total: reports.length, withCoords: allReportsWithCoords.length, active: activeReports.length, resolved: resolvedReports.length })
+
+                            // Heatmap points from active potholes
+                            const heatmapPoints = activeReports.map(r => {
+                                const severityIntensity = { critical: 1.0, large: 0.8, medium: 0.5, small: 0.3 }
+                                return [r.location.lat, r.location.lng, severityIntensity[r.severity] || 0.5]
+                            })
+
+                            // Map center (first pothole or India center)
+                            const defaultCenter = [20.5937, 78.9629]
+                            const mapCenter = allReportsWithCoords.length > 0
+                                ? [allReportsWithCoords[0].location.lat, allReportsWithCoords[0].location.lng]
+                                : defaultCenter
+
+                            return (
+                                <div className="heatmap-section">
+                                    <h3>🔥 Pothole Hotspots</h3>
+                                    <p className="heatmap-subtitle">
+                                        {activeReports.length} active • {resolvedReports.length} fixed
+                                    </p>
+
+                                    {/* Map Controls */}
+                                    <div className="heatmap-controls">
+                                        <input
+                                            type="text"
+                                            placeholder="🔍 Search location..."
+                                            className="heatmap-search"
+                                            onKeyDown={async (e) => {
+                                                if (e.key === 'Enter' && e.target.value.trim()) {
+                                                    try {
+                                                        const query = encodeURIComponent(e.target.value)
+                                                        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`)
+                                                        const data = await res.json()
+                                                        if (data[0]) {
+                                                            const { lat, lon } = data[0]
+                                                            // Dispatch custom event for map fly
+                                                            window.dispatchEvent(new CustomEvent('flyToLocation', { detail: { lat: parseFloat(lat), lng: parseFloat(lon) } }))
+                                                        } else {
+                                                            alert('Location not found')
+                                                        }
+                                                    } catch (err) {
+                                                        console.error('Search error:', err)
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            className="btn-my-location"
+                                            onClick={() => {
+                                                if (navigator.geolocation) {
+                                                    navigator.geolocation.getCurrentPosition(
+                                                        (pos) => {
+                                                            window.dispatchEvent(new CustomEvent('flyToLocation', {
+                                                                detail: { lat: pos.coords.latitude, lng: pos.coords.longitude }
+                                                            }))
+                                                        },
+                                                        (err) => alert('Could not get location: ' + err.message)
+                                                    )
+                                                } else {
+                                                    alert('Geolocation not supported')
+                                                }
+                                            }}
+                                            title="Go to my location"
+                                        >
+                                            📍 My Location
+                                        </button>
+                                    </div>
+
+                                    <div className="heatmap-container">
+                                        <MapContainer
+                                            center={mapCenter}
+                                            zoom={12}
+                                            style={{ height: '400px', width: '100%', borderRadius: '12px' }}
+                                            scrollWheelZoom={true}
+                                        >
+                                            <TileLayer
+                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                                attribution='&copy; OpenStreetMap'
+                                            />
+                                            {heatmapPoints.length > 0 && <HeatmapLayer points={heatmapPoints} />}
+
+                                            {/* Resolved pothole markers (green) */}
+                                            {resolvedReports.map(r => (
+                                                <Marker
+                                                    key={r.id}
+                                                    position={[r.location.lat, r.location.lng]}
+                                                    icon={L.divIcon({
+                                                        className: 'resolved-marker',
+                                                        html: `<div style="width:14px;height:14px;background:#22c55e;border:2px solid white;border-radius:50%;opacity:0.7;"></div>`,
+                                                        iconSize: [14, 14],
+                                                        iconAnchor: [7, 7]
+                                                    })}
+                                                >
+                                                    <Popup>✅ Fixed: {r.location?.address || 'Location'}</Popup>
+                                                </Marker>
+                                            ))}
+
+                                            {/* Active pothole markers */}
+                                            {activeReports.map(r => (
+                                                <Marker
+                                                    key={r.id}
+                                                    position={[r.location.lat, r.location.lng]}
+                                                    icon={L.divIcon({
+                                                        className: 'active-marker',
+                                                        html: `<div style="width:16px;height:16px;background:${r.severity === 'critical' ? '#ef4444' :
+                                                            r.severity === 'large' ? '#f97316' :
+                                                                r.severity === 'medium' ? '#eab308' : '#6b7280'
+                                                            };border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
+                                                        iconSize: [16, 16],
+                                                        iconAnchor: [8, 8]
+                                                    })}
+                                                >
+                                                    <Popup>
+                                                        <strong>{r.severity?.toUpperCase()}</strong><br />
+                                                        {r.location?.address || 'Reported pothole'}
+                                                    </Popup>
+                                                </Marker>
+                                            ))}
+
+                                            {/* FlyTo component */}
+                                            <FlyToLocation />
+                                        </MapContainer>
+                                    </div>
+                                    <div className="heatmap-legend">
+                                        <span className="legend-item"><span className="dot red"></span> Critical</span>
+                                        <span className="legend-item"><span className="dot orange"></span> Large</span>
+                                        <span className="legend-item"><span className="dot yellow"></span> Medium</span>
+                                        <span className="legend-item"><span className="dot green"></span> Fixed</span>
+                                    </div>
+                                </div>
+                            )
+                        })()}
 
                         {filteredReports.length === 0 ? (
                             <div className="empty-state">

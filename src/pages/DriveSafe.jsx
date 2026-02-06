@@ -70,8 +70,15 @@ function DriveSafe() {
     const loadPotholes = async () => {
         try {
             const reports = await getReportsFromDatabase()
+            console.log('🚗 DriveSafe: Loaded reports', reports.length)
             // Only include unresolved potholes
             const active = reports.filter(r => r.status !== 'resolved')
+            console.log('🚗 DriveSafe: Active potholes', active.length, active.map(p => ({
+                id: p.id,
+                lat: p.location?.lat,
+                lng: p.location?.lng,
+                severity: p.severity
+            })))
             setPotholes(active)
         } catch (err) {
             console.error('Failed to load potholes:', err)
