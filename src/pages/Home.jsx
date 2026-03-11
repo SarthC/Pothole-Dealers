@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import ScrollSequence from '../components/ScrollSequence'
 import { getReportsFromDatabase } from '../utils/realtimeDb'
 import { calculatePriority, getPriorityLevel } from '../utils/priority'
+import { useAuth } from '../context/AuthContext'
 import './Home.css'
 
 function Home() {
+    const { user } = useAuth()
     const [stats, setStats] = useState({
         total: 0,
         fixed: 0,
@@ -18,6 +20,8 @@ function Home() {
         medium: 0,
         low: 0
     })
+    const [feedback, setFeedback] = useState('')
+    const [feedbackStatus, setFeedbackStatus] = useState('') // '', 'sending', 'sent', 'error'
 
     useEffect(() => {
         loadStats()
@@ -46,6 +50,29 @@ function Home() {
             setPriorityCounts(counts)
         } catch (error) {
             console.error('Error loading stats:', error)
+        }
+    }
+
+    const handleFeedbackSubmit = async (e) => {
+        e.preventDefault()
+        if (!feedback.trim()) return
+        setFeedbackStatus('sending')
+        try {
+            await fetch('https://formsubmit.co/ajax/sawthakk@gmail.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    _subject: 'POFIX Feedback',
+                    name: user?.displayName || 'Anonymous User',
+                    email: user?.email || 'anonymous',
+                    message: feedback
+                })
+            })
+            setFeedbackStatus('sent')
+        } catch (err) {
+            console.error('Feedback error:', err)
+            setFeedbackStatus('error')
+            setTimeout(() => setFeedbackStatus(''), 3000)
         }
     }
 
@@ -196,6 +223,77 @@ function Home() {
                 </div>
             </section>
 
+            {/* Feedback Section */}
+            <section className="feedback-section">
+                <div className="container">
+                    <div className="feedback-wrapper">
+                        <div className="feedback-info">
+                            <span className="tag">Beta Version</span>
+                            <h2>Help Us Improve</h2>
+                            <p>
+                                POFIX is currently in development. Your feedback helps us build a better platform
+                                for everyone. Tell us what changes you'd like to see!
+                            </p>
+                        </div>
+                        <div className="feedback-form-card">
+                            {feedbackStatus === 'sent' ? (
+                                <div className="feedback-success">
+                                    <div className="founder-quote-card">
+                                        <div className="quote-icon">“</div>
+                                        <h3>Message from the Founder</h3>
+                                        <p className="quote-text">
+                                            Thank you so much for taking the time to share your feedback.
+                                            Every suggestion helps us build a better POFIX for everyone.
+                                            Your voice truly matters in making our roads safer!
+                                        </p>
+                                        <div className="founder-sig">
+                                            <div className="founder-avatar">SC</div>
+                                            <div>
+                                                <strong>Sarthak Choudhari</strong>
+                                                <span>Founder, POFIX</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => { setFeedbackStatus(''); setFeedback(''); }}
+                                    >
+                                        Send Another
+                                    </button>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleFeedbackSubmit}>
+                                    <textarea
+                                        className="feedback-textarea"
+                                        placeholder="What features would you like? Any bugs to report? How can we improve?"
+                                        value={feedback}
+                                        onChange={(e) => setFeedback(e.target.value)}
+                                        rows={5}
+                                        maxLength={500}
+                                        required
+                                    />
+                                    <div className="feedback-footer">
+                                        <span className="char-count">{feedback.length}/500</span>
+                                        <button
+                                            type="submit"
+                                            className="btn btn-primary"
+                                            disabled={feedbackStatus === 'sending' || !feedback.trim()}
+                                        >
+                                            {feedbackStatus === 'sending' ? (
+                                                <><span className="feedback-spinner"></span> Sending...</>
+                                            ) : '💬 Submit Feedback'}
+                                        </button>
+                                    </div>
+                                    {feedbackStatus === 'error' && (
+                                        <p className="feedback-error">Failed to send. Please try again.</p>
+                                    )}
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <footer className="footer">
                 <div className="container">
                     <div className="footer-content">
@@ -206,11 +304,11 @@ function Home() {
                         <div className="footer-links">
                             <Link to="/report">Report</Link>
                             <Link to="/dashboard">Dashboard</Link>
-                            <Link to="/login">Sign In</Link>
+                            {!user && <Link to="/login">Sign In</Link>}
                         </div>
                     </div>
                     <div className="footer-bottom">
-                        <p>&copy; 2026 Pofix. Built for better roads.</p>
+                        <p>&copy; 2026 Pofix. Built with ❤️ by Sarthak Choudhari</p>
                     </div>
                 </div>
             </footer>

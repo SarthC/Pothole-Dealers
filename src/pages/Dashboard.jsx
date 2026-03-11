@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getReportsFromDatabase, updateReportStatusDatabase, subscribeToReports } from '../utils/realtimeDb'
+import { useAuth } from '../context/AuthContext'
 import { getAllContractorsWithStats } from '../utils/contractorService'
 import PotholeCard from '../components/PotholeCard'
 import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet'
@@ -68,11 +69,31 @@ function FlyToLocation() {
 
 function Dashboard() {
     const navigate = useNavigate()
+    const { user, isAuthenticated } = useAuth()
     const [reports, setReports] = useState([])
     const [contractors, setContractors] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all') // all, pending, progress, resolved
     const [sortBy, setSortBy] = useState('newest') // newest, severe, topReporter, mostReported
+    const [showMyReports, setShowMyReports] = useState(false)
+
+    // Get user's reports from the last 6 months
+    const myReports = useMemo(() => {
+        if (!user?.email) return []
+        const sixMonthsAgo = new Date()
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+
+        return reports.filter(r => {
+            // Match by email in reporters array or top-level reporterEmail
+            const reporterMatch = r.reporterEmail === user.email ||
+                (r.reporters && r.reporters.some(rep => rep.email === user.email))
+            if (!reporterMatch) return false
+
+            // Check if within last 6 months
+            const reportDate = new Date(r.createdAt)
+            return reportDate >= sixMonthsAgo
+        }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    }, [reports, user])
 
     useEffect(() => {
         setLoading(true)
@@ -292,6 +313,82 @@ function Dashboard() {
                                 <span className="stat-label">Fixed</span>
                             </div>
                         </div>
+
+                        {/* My Reports Section - Only for logged-in users */}
+                        {isAuthenticated && (
+                            <div className="my-reports-section">
+                                <button
+                                    className="my-reports-toggle"
+                                    onClick={() => setShowMyReports(!showMyReports)}
+                                >
+                                    <span className="my-reports-toggle-left">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                            <circle cx="8.5" cy="7" r="4" />
+                                        </svg>
+                                        My Reports ({myReports.length})
+                                    </span>
+                                    <svg
+                                        width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2"
+                                        style={{ transform: showMyReports ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.3s' }}
+                                    >
+                                        <path d="M6 9l6 6 6-6" />
+                                    </svg>
+                                </button>
+
+                                {showMyReports && (
+                                    <div className="my-reports-list">
+                                        {myReports.length === 0 ? (
+                                            <div className="my-reports-empty">
+                                                <p>You haven't reported any potholes in the last 6 months.</p>
+                                                <button onClick={() => navigate('/report')} className="btn btn-primary btn-sm">Report Now</button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <p className="my-reports-subtitle">Your reports from the last 6 months</p>
+                                                <div className="my-reports-table-wrap">
+                                                    <table className="my-reports-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Date</th>
+                                                                <th>Location</th>
+                                                                <th>Severity</th>
+                                                                <th>Status</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {myReports.map(report => {
+                                                                const date = new Date(report.createdAt)
+                                                                const dateStr = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                                                                return (
+                                                                    <tr key={report.id}>
+                                                                        <td>{dateStr}</td>
+                                                                        <td className="location-cell">{report.location?.address || `${report.location?.lat?.toFixed(4)}, ${report.location?.lng?.toFixed(4)}`}</td>
+                                                                        <td>
+                                                                            <span className={`severity-pill ${report.severity}`}>
+                                                                                {report.severity}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <span className={`status-pill ${report.status}`}>
+                                                                                {report.status === 'pending' && '🟡 Pending'}
+                                                                                {report.status === 'progress' && '🔵 In Progress'}
+                                                                                {report.status === 'resolved' && '🟢 Resolved'}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                )
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Heatmap Section */}
                         {(() => {

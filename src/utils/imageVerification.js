@@ -234,7 +234,7 @@ export async function verifyImageWithAI(imageSource) {
                 return {
                     valid: false,
                     confidence: 0,
-                    message: `❌ Image rejected: Detected ${rejectedKeyword}. Please upload a clear photo of road damage.`,
+                    message: `Uploaded image is not a pothole. Please upload a valid pothole image.`,
                     predictions
                 }
             }
