@@ -606,9 +606,9 @@ select.input-field {
 /* Responsive */
 @media (max-width: 768px) {
   :root {
-    --font-size-5xl: 2.5rem;
-    --font-size-4xl: 2rem;
-    --font-size-3xl: 1.75rem;
+    --font-size-5xl: 2rem;
+    --font-size-4xl: 1.75rem;
+    --font-size-3xl: 1.5rem;
   }
 
   .container {
@@ -616,12 +616,15 @@ select.input-field {
   }
 
   .section {
-    padding: var(--space-16) 0;
+    padding: var(--space-12) 0;
   }
 
-  .grid-2,
-  .grid-3 {
-    grid-template-columns: 1fr;
+  .btn {
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--font-size-sm);
+    min-height: 44px;
+    width: 100%;
+    justify-content: center;
   }
 
   .btn-lg {
@@ -629,8 +632,31 @@ select.input-field {
     font-size: var(--font-size-base);
   }
 
+  .btn-sm {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-size-xs);
+    width: auto;
+  }
+
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+
   .hidden-mobile {
     display: none;
+  }
+
+  h1 {
+    font-size: var(--font-size-3xl);
+  }
+
+  h2 {
+    font-size: var(--font-size-2xl);
+  }
+
+  h3 {
+    font-size: var(--font-size-xl);
   }
 }
 

@@ -199,16 +199,66 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .report-page {
+        padding-top: calc(60px + var(--space-4));
+        padding-bottom: var(--space-8);
+    }
+
+    .report-header {
+        margin-bottom: var(--space-6);
+    }
+
+    .report-header h1 {
+        font-size: var(--font-size-2xl);
+    }
+
+    .report-header p {
+        font-size: var(--font-size-base);
+    }
+
+    .report-form {
+        gap: var(--space-6);
+    }
+
     .form-row {
         grid-template-columns: 1fr;
+    }
+
+    .image-upload {
+        padding: var(--space-6);
+        min-height: 180px;
     }
 
     .location-options {
         flex-direction: column;
     }
 
+    .location-options .btn {
+        width: 100%;
+    }
+
     .success-actions {
         flex-direction: column;
+    }
+
+    .success-actions .btn {
+        width: 100%;
+    }
+
+    .auth-prompt {
+        padding: var(--space-8) var(--space-4);
+    }
+
+    .auth-prompt h2 {
+        font-size: var(--font-size-2xl);
+    }
+
+    .success-message {
+        padding: var(--space-8) var(--space-4);
+    }
+
+    .success-message h2 {
+        font-size: var(--font-size-2xl);
     }
 }
 

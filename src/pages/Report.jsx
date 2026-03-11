@@ -152,13 +152,14 @@ function Report() {
                     // Reverse Geocode
                     let address = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
                     try {
+                        // Nominatim requires a user-agent or email to prevent 429 blocks. Added email parameter.
                         const response = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+                            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2&email=pofix.app.contact@gmail.com`
                         )
                         const data = await response.json()
                         if (data.display_name) address = data.display_name
                     } catch (e) {
-                        console.warn('Reverse geocoding failed', e)
+                        console.warn('Reverse geocoding failed (Rate limit or CORS)', e)
                     }
 
                     setFormData(prev => ({
@@ -176,7 +177,7 @@ function Report() {
                     resolve(true)
                 },
                 (error) => {
-                    console.error('Device GPS failed:', error)
+                    console.error('Using Current device location as Problem in fetching location from image', error)
                     setGpsLoading(false)
                     setGpsError('❌ Location access denied. Please enable location permissions.')
                     setVerificationResult(prev => ({
@@ -187,7 +188,7 @@ function Report() {
                     setVerifying(false)
                     resolve(false)
                 },
-                { enableHighAccuracy: true, timeout: 10000 }
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             )
         })
     }
@@ -200,13 +201,14 @@ function Report() {
 
         let address = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
         try {
+            // Nominatim requires a user-agent or email to prevent 429 blocks. Added email parameter.
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=jsonv2&email=pofix.app.contact@gmail.com`
             )
             const data = await response.json()
             if (data.display_name) address = data.display_name
         } catch (e) {
-            console.warn('Reverse geocoding failed', e)
+            console.warn('Reverse geocoding failed (Rate limit or CORS)', e)
         }
 
         setFormData(prev => ({
@@ -226,6 +228,18 @@ function Report() {
         setLocationFromPhoto(false)
         setGpsError(null)
         setStatusMessage('Platform is verifying your image...')
+
+        // 🧠 GPS PRE-WARMING TRICK:
+        // Turn on the GPS hardware in the background immediately while AI runs.
+        // This gives the device an extra 2-3 seconds to lock onto satellites, 
+        // leading to a significantly more accurate location when getDeviceLocation() is called later.
+        if (navigator.geolocation && (isFromCamera || !file.name.includes('exif'))) {
+            navigator.geolocation.getCurrentPosition(
+                () => console.log('📍 GPS hardware pre-warmed'),
+                () => { },
+                { enableHighAccuracy: true, maximumAge: 0 }
+            )
+        }
 
         // Read file as base64
         const reader = new FileReader()
@@ -256,25 +270,26 @@ function Report() {
 
                 // Step 2: Get Location
                 setStatusMessage('Platform is detecting location...')
-                await new Promise(r => setTimeout(r, 400)) // UX delay
+                await new Promise(r => setTimeout(r, 1500)) // Give the pre-warmed GPS extra time to lock
 
                 if (isFromCamera) {
-                    // CAMERA (Phone or Laptop Webcam): Always use device GPS
+                    // CAMERA: Always use device GPS
                     console.log('📍 Camera/Webcam photo - using Device GPS directly')
                     await getDeviceLocation()
                 } else {
-                    // GALLERY: Try EXIF first, fallback to device GPS
+                    // GALLERY: Try EXIF GPS first, fallback to device GPS
                     console.log('📍 Gallery photo - trying EXIF GPS first')
                     const exifData = await extractExifData(file)
 
-                    // Check Photo Age (48h limit)
-                    if (exifData.date) {
+                    // Check Photo Age (48h limit) - use EXIF date or file lastModified as fallback
+                    const imageDate = exifData.date || (file.lastModified ? new Date(file.lastModified) : null)
+                    if (imageDate) {
                         const now = new Date()
-                        const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
+                        const hoursDiff = (now - imageDate) / (1000 * 60 * 60)
                         if (hoursDiff > 48) {
                             setVerificationResult({
                                 valid: false,
-                                errors: [`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`]
+                                errors: [`Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`]
                             })
                             setVerifying(false)
                             return
@@ -337,7 +352,8 @@ function Report() {
 
                 try {
                     const response = await fetch(
-                        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+                        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2&email=pofix.app.contact@gmail.com`,
+                        { headers: { 'Accept-Language': 'en' } }
                     )
                     const data = await response.json()
 
@@ -349,7 +365,8 @@ function Report() {
                             address: data.display_name || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
                         }
                     }))
-                } catch {
+                } catch (e) {
+                    console.warn('Reverse geocoding failed (Rate limit or CORS)', e)
                     setFormData(prev => ({
                         ...prev,
                         location: {
@@ -366,7 +383,7 @@ function Report() {
                 alert('Unable to retrieve your location')
                 setGpsLoading(false)
             },
-            { enableHighAccuracy: true, timeout: 10000 }
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
         )
     }
 
@@ -647,15 +664,75 @@ function Report() {
                                             />
                                         </div>
 
-                                        <div className="location-correction text-center">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowMap(true)}
-                                                className="btn btn-secondary btn-sm"
-                                                style={{ margin: '0 auto' }}
-                                            >
-                                                Wrong location? Correct on Map
-                                            </button>
+                                        <div className="location-correction">
+                                            <p className="correction-hint" style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+                                                Wrong location? Search your address or correct on map:
+                                            </p>
+                                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <input
+                                                    type="text"
+                                                    className="input-field"
+                                                    placeholder="Search address (e.g. MG Road, Pune)"
+                                                    id="manual-address-search"
+                                                    style={{ flex: 1 }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault()
+                                                            document.getElementById('search-address-btn').click()
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    id="search-address-btn"
+                                                    className="btn btn-primary btn-sm"
+                                                    style={{ whiteSpace: 'nowrap' }}
+                                                    onClick={async () => {
+                                                        const query = document.getElementById('manual-address-search').value.trim()
+                                                        if (!query) return
+                                                        try {
+                                                            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=1&email=pofix.app.contact@gmail.com`)
+                                                            const data = await res.json()
+                                                            if (data && data.length > 0) {
+                                                                const { lat, lon, display_name } = data[0]
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    location: {
+                                                                        lat: parseFloat(lat),
+                                                                        lng: parseFloat(lon),
+                                                                        address: display_name
+                                                                    }
+                                                                }))
+                                                            } else {
+                                                                alert('Address not found. Please try a different search.')
+                                                            }
+                                                        } catch {
+                                                            alert('Search failed. Please try again.')
+                                                        }
+                                                    }}
+                                                >
+                                                    🔍 Search
+                                                </button>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowMap(true)}
+                                                    className="btn btn-secondary btn-sm"
+                                                >
+                                                    📌 Pick on Map
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    onClick={async () => {
+                                                        setStatusMessage('Re-detecting location...')
+                                                        await getDeviceLocation()
+                                                    }}
+                                                >
+                                                    📍 Re-detect GPS
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <button

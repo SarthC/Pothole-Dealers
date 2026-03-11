@@ -36,56 +36,67 @@ export async function extractExifData(file) {
         // Extract GPS
         let gps = null
         if (tags['GPSLatitude'] && tags['GPSLongitude']) {
-            const latRaw = tags['GPSLatitude'].value
-            const latRef = tags['GPSLatitudeRef'] ? tags['GPSLatitudeRef'].value[0] : ''
-            const lngRaw = tags['GPSLongitude'].value
-            const lngRef = tags['GPSLongitudeRef'] ? tags['GPSLongitudeRef'].value[0] : ''
-
-            // ExifReader usually normalizes 'value' to an array of numbers (decimal) if simple, 
-            // or 2D array [[num,den],...] if rational.
-            // But ExifReader v4 "description" often holds the decimal if configured? 
-            // Let's rely on standard DMS calculation from 'value'.
-
-            // Helper to get float from ExifReader value
-            const getFloat = (val) => {
-                if (typeof val === 'number') return val
-                // If array [num, den]
-                if (Array.isArray(val) && val.length === 2 && typeof val[1] === 'number' && val[1] !== 0) {
-                    return val[0] / val[1]
-                }
-                // If just array of one number
-                if (Array.isArray(val) && val.length === 1) return val[0]
-                return 0
-            }
-
             try {
-                // Determine format based on first element
-                let lat, lng
+                let lat = null
+                let lng = null
 
-                // ExifReader typically returns [degrees, minutes, seconds] where each is a number or [num, den]
-                // We need to robustly handle this.
-                const convertToDd = (coords, ref) => {
-                    if (!Array.isArray(coords)) return null
+                // Method 1: Use ExifReader's 'description' field (already decimal degrees)
+                const latDesc = tags['GPSLatitude'].description
+                const lngDesc = tags['GPSLongitude'].description
+                const latRef = tags['GPSLatitudeRef'] ? (tags['GPSLatitudeRef'].value || tags['GPSLatitudeRef'].description || '') : ''
+                const lngRef = tags['GPSLongitudeRef'] ? (tags['GPSLongitudeRef'].value || tags['GPSLongitudeRef'].description || '') : ''
 
-                    let d = getFloat(coords[0])
-                    let m = getFloat(coords[1])
-                    let s = getFloat(coords[2])
+                // Get the reference direction (N/S/E/W)
+                const latDirection = (typeof latRef === 'string' ? latRef : (Array.isArray(latRef) ? latRef[0] : '')).toString().toUpperCase()
+                const lngDirection = (typeof lngRef === 'string' ? lngRef : (Array.isArray(lngRef) ? lngRef[0] : '')).toString().toUpperCase()
 
-                    let dd = d + m / 60 + s / 3600
-
-                    if (ref === 'S' || ref === 'W') dd = dd * -1
-                    return dd
+                if (latDesc !== undefined && lngDesc !== undefined) {
+                    lat = parseFloat(latDesc)
+                    lng = parseFloat(lngDesc)
+                    console.log('📍 Using description values:', { lat, lng, latDirection, lngDirection })
                 }
 
-                lat = convertToDd(latRaw, latRef)
-                lng = convertToDd(lngRaw, lngRef)
+                // Method 2: Manual DMS conversion from 'value' array
+                if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+                    const latRaw = tags['GPSLatitude'].value
+                    const lngRaw = tags['GPSLongitude'].value
 
-                console.log('📍 Calculated coordinates:', { lat, lng })
+                    const getFloat = (val) => {
+                        if (typeof val === 'number') return val
+                        if (Array.isArray(val) && val.length === 2 && typeof val[0] === 'number' && typeof val[1] === 'number' && val[1] !== 0) {
+                            return val[0] / val[1]
+                        }
+                        if (Array.isArray(val) && val.length === 1) return getFloat(val[0])
+                        if (typeof val === 'object' && val !== null && 'value' in val) return val.value
+                        return parseFloat(val) || 0
+                    }
 
-                if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-                    gps = { lat, lng }
+                    const convertToDd = (coords) => {
+                        if (!Array.isArray(coords) || coords.length < 3) return null
+                        const d = getFloat(coords[0])
+                        const m = getFloat(coords[1])
+                        const s = getFloat(coords[2])
+                        return d + m / 60 + s / 3600
+                    }
+
+                    lat = convertToDd(latRaw)
+                    lng = convertToDd(lngRaw)
+                    console.log('📍 Using DMS conversion:', { lat, lng })
                 }
 
+                // Apply direction reference
+                if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+                    if (latDirection === 'S') lat = Math.abs(lat) * -1
+                    if (lngDirection === 'W') lng = Math.abs(lng) * -1
+
+                    // Sanity check: valid coordinate ranges
+                    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0)) {
+                        gps = { lat, lng }
+                        console.log('📍 Final GPS coordinates:', gps)
+                    } else {
+                        console.warn('📍 GPS coordinates out of valid range:', { lat, lng })
+                    }
+                }
             } catch (err) {
                 console.warn('GPS Calculation Error:', err)
             }
@@ -107,24 +118,31 @@ import * as mobilenet from '@tensorflow-models/mobilenet'
 // Cache the model after first load
 let cachedModel = null
 
-// Keywords that indicate road/pothole related content (ImageNet classes MobileNet recognizes)
+// Keywords that indicate road/pothole related content (ground-level, close-up)
 const ROAD_KEYWORDS = [
-    // Roads and surfaces
+    // Roads and surfaces - close-up / ground level
     'road', 'street', 'pavement', 'asphalt', 'concrete', 'gravel', 'stone',
-    'highway', 'lane', 'path', 'sidewalk', 'curb', 'manhole', 'gutter',
+    'lane', 'path', 'sidewalk', 'curb', 'manhole', 'gutter',
     'ground', 'floor', 'surface', 'crack', 'hole', 'dirt', 'mud', 'sand',
     // Vehicles (common in road photos)
     'car', 'vehicle', 'wheel', 'tire', 'traffic', 'cab', 'taxi', 'jeep',
     'minivan', 'ambulance', 'bus', 'truck', 'trailer', 'van', 'pickup',
     'motor', 'bicycle', 'bike', 'scooter', 'moped', 'motorcycle',
-    // Road infrastructure
-    'crosswalk', 'zebra', 'barrier', 'guardrail', 'cone', 'sign', 'pole',
-    'light', 'lamp', 'signal', 'parking', 'meter', 'hydrant', 'mailbox',
-    // Outdoor general
-    'outdoor', 'outside', 'urban', 'city', 'town', 'building', 'bridge',
-    'tunnel', 'overpass', 'underpass', 'intersection', 'corner',
+    // Road infrastructure close-up
+    'crosswalk', 'zebra', 'barrier', 'guardrail', 'cone', 'sign',
+    'parking', 'meter', 'hydrant', 'mailbox',
     // Common objects near roads
-    'bench', 'trash', 'bin', 'fence', 'wall', 'gate', 'shop', 'store'
+    'bench', 'trash', 'bin', 'fence', 'wall', 'gate'
+]
+
+// Keywords that indicate a WIDE/SCENIC road view (not a pothole close-up)
+const SCENIC_KEYWORDS = [
+    'highway', 'freeway', 'expressway', 'overpass', 'viaduct',
+    'bridge', 'tunnel', 'underpass', 'intersection',
+    'lakeside', 'valley', 'seashore', 'promontory', 'alp',
+    'pier', 'breakwater', 'dam', 'castle', 'palace', 'church',
+    'monastery', 'mosque', 'stupa', 'fountain', 'boathouse',
+    'dome', 'barn', 'greenhouse', 'beacon', 'lighthouse'
 ]
 
 // Keywords that indicate NOT a road photo (should reject these)
@@ -143,17 +161,17 @@ const REJECT_KEYWORDS = [
     'screen', 'monitor', 'laptop', 'computer', 'phone', 'television', 'tv',
     // Documents, diagrams, screenshots
     'text', 'document', 'paper', 'book', 'magazine', 'newspaper',
-    'diagram', 'flowchart', 'chart', 'graph', 'menu', 'web', 'website', 'comic',
+    'diagram', 'flowchart', 'chart', 'graph', 'menu', 'website', 'comic',
     'envelope', 'packet', 'notebook', 'binder', 'folder', 'letter',
     // Nature (not road)
-    'flower', 'tree', 'plant', 'forest', 'ocean', 'beach', 'mountain', 'sky', 'cloud',
-    // Fictional / Art / Costumes (Fix for Superman/Spiderman)
-    'mask', 'costume', 'cape', 'suit', 'helmet', 'uniform', 'jersey',
+    'flower', 'plant', 'forest', 'ocean', 'beach', 'mountain',
+    // Fictional / Art / Costumes
+    'mask', 'costume', 'cape', 'helmet', 'uniform', 'jersey',
     'toy', 'doll', 'action figure', 'robot', 'figurine', 'lego',
     'art', 'painting', 'drawing', 'sketch', 'illustration', 'cartoon', 'anime', 'animation',
     'comic', 'poster', 'flyer', 'banner', 'graffiti',
     'space', 'astronaut', 'planet', 'galaxy', 'star', 'rocket',
-    'spider', 'web', 'wing', 'monster', 'alien'
+    'spider', 'wing', 'monster', 'alien'
 ]
 
 /**
@@ -201,45 +219,34 @@ export async function verifyImageWithAI(imageSource) {
         const predictions = await model.classify(imgElement)
         console.log('📋 AI Predictions:', predictions)
 
-        // Check predictions against keywords
+        // Analyze predictions against keyword lists
         let isRoadRelated = false
+        let isScenicRoad = false
         let isRejected = false
         let matchedKeyword = ''
-        let rejectedKeyword = ''
         let confidence = 0
 
         for (const prediction of predictions) {
             const label = prediction.className.toLowerCase()
 
-            // Check for rejection keywords first
+            // Check for rejection keywords (strict)
             for (const keyword of REJECT_KEYWORDS) {
-                if (label.includes(keyword) && prediction.probability > 0.05) { // Strict rejection
+                if (label.includes(keyword) && prediction.probability > 0.05) {
                     isRejected = true
-                    rejectedKeyword = keyword
+                    break
+                }
+            }
+            if (isRejected) break
+
+            // Check for scenic/wide road keywords
+            for (const keyword of SCENIC_KEYWORDS) {
+                if (label.includes(keyword) && prediction.probability > 0.1) {
+                    isScenicRoad = true
                     break
                 }
             }
 
-            // Check for road-related keywords
-            for (const keyword of ROAD_KEYWORDS) {
-                if (label.includes(keyword)) {
-                    isRoadRelated = true
-                    matchedKeyword = keyword
-                    confidence = prediction.probability
-                    break
-                }
-            }
-
-            if (isRejected) {
-                return {
-                    valid: false,
-                    confidence: 0,
-                    message: `Uploaded image is not a pothole. Please upload a valid pothole image.`,
-                    predictions
-                }
-            }
-
-            // Check for road-related keywords
+            // Check for road-related keywords (ground-level)
             for (const keyword of ROAD_KEYWORDS) {
                 if (label.includes(keyword)) {
                     isRoadRelated = true
@@ -250,9 +257,29 @@ export async function verifyImageWithAI(imageSource) {
             }
         }
 
-        // Determine result
+        // Decision logic:
 
-        // Case 1: POSITIVE MATCH - It's definitely a road/pothole
+        // Case 1: Clearly NOT a road image
+        if (isRejected) {
+            return {
+                valid: false,
+                confidence: 0,
+                message: 'Uploaded image is not a pothole. Please upload a valid pothole image.',
+                predictions
+            }
+        }
+
+        // Case 2: Scenic/wide road view (no visible pothole)
+        if (isScenicRoad) {
+            return {
+                valid: false,
+                confidence: 0,
+                message: 'Image appears to be a wide road view. Please take a closer photo of the actual pothole.',
+                predictions
+            }
+        }
+
+        // Case 3: Road-related close-up (likely pothole)
         if (isRoadRelated) {
             return {
                 valid: true,
@@ -262,12 +289,12 @@ export async function verifyImageWithAI(imageSource) {
             }
         }
 
-        // Case 2: NO MATCH but NOT REJECTED - Ambiguous (Innocent until proven guilty)
-        // MobileNet isn't perfect, so we allow "unknown" images as long as they aren't clearly invalid (like faces/food)
+        // Case 4: Ambiguous - not clearly road or rejected
+        // MobileNet can't classify close-up ground textures well, so accept ambiguous images
         return {
             valid: true,
             confidence: 0.1,
-            message: '✅ Image verified (General Outdoor)',
+            message: '✅ Image verified',
             predictions
         }
 
@@ -326,17 +353,23 @@ export async function verifyImage(file) {
     // Flag to indicate if we need device GPS
     result.requireDeviceGps = !exifData.gps
 
-    // Optional: Check 48-hour limit if EXIF date is available
-    if (exifData.date) {
+    // Step 1b: Check 48-hour freshness limit
+    // Use EXIF date if available, otherwise fall back to file's lastModified timestamp
+    const imageDate = exifData.date || (file.lastModified ? new Date(file.lastModified) : null)
+
+    if (imageDate) {
         const now = new Date()
-        const hoursDiff = (now - exifData.date) / (1000 * 60 * 60)
-        console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours`)
+        const hoursDiff = (now - imageDate) / (1000 * 60 * 60)
+        console.log(`📅 Image age: ${hoursDiff.toFixed(1)} hours (source: ${exifData.date ? 'EXIF' : 'file lastModified'})`)
 
         if (hoursDiff > 48) {
             result.valid = false
-            result.errors.push(`❌ Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`)
+            result.errors.push(`Photo is ${Math.round(hoursDiff)} hours old. Only photos taken within the last 48 hours are accepted.`)
             return result
         }
+    } else {
+        // No date info at all — warn but allow
+        result.warnings.push('Could not determine image date. Please use a recent photo.')
     }
 
     // Step 2: AI-based content verification (Is it a pothole/road image?) - REQUIRED

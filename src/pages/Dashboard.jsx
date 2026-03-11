@@ -453,7 +453,8 @@ function Dashboard() {
                                                                 detail: { lat: pos.coords.latitude, lng: pos.coords.longitude }
                                                             }))
                                                         },
-                                                        (err) => alert('Could not get location: ' + err.message)
+                                                        (err) => alert('Could not get location: ' + err.message),
+                                                        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
                                                     )
                                                 } else {
                                                     alert('Geolocation not supported')

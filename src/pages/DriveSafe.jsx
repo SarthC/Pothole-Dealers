@@ -145,8 +145,8 @@ function DriveSafe() {
             },
             {
                 enableHighAccuracy: true,
-                maximumAge: 2000, // Accept positions up to 2 seconds old
-                timeout: 30000 // Wait up to 30 seconds for a fix
+                maximumAge: 0, // Force a fresh GPS lock, no cached positions
+                timeout: 20000 // Wait up to 20 seconds for a fix
             }
         )
     }, [])
