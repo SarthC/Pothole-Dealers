@@ -13,7 +13,7 @@ export async function uploadPotholeImage(file, userId = 'anonymous') {
         // Create a unique filename
         const timestamp = Date.now()
         const randomId = Math.random().toString(36).substring(2, 8)
-        const extension = file.name.split('.').pop() || 'jpg'
+        const extension = file.name?.split('.').pop() || 'jpg'
         const filename = `pothole_${timestamp}_${randomId}.${extension}`
 
         // Create storage reference

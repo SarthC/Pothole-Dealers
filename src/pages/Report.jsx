@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveReportToDatabase } from '../utils/realtimeDb'
+import { uploadPotholeImage, compressImage } from '../utils/imageUpload'
 import { verifyImageWithAI, extractExifData, preloadModel } from '../utils/imageVerification'
 import MapPicker from '../components/MapPicker'
 import Stepper, { Step } from '../components/Stepper'
@@ -397,12 +398,13 @@ function Report() {
         setIsSubmitting(true)
 
         try {
-            // Compress image to base64 (avoiding Firebase Storage CORS issues)
-            const compressedBase64 = await compressImageToBase64(formData.imageFile, 800, 0.6)
+            // Compress image aggressively before storing as base64 in RTDB
+            // (avoids Firebase Storage CORS issues on localhost)
+            const compressedBase64 = await compressImageToBase64(formData.imageFile, 500, 0.5)
             console.log('✅ Image compressed to base64')
 
             const report = {
-                imageUrl: compressedBase64, // Base64 stored directly
+                imageUrl: compressedBase64,
                 location: formData.location,
                 severity: formData.severity,
                 roadType: formData.roadType,

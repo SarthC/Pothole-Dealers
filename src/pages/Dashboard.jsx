@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getReportsFromDatabase, updateReportStatusDatabase } from '../utils/realtimeDb'
+import { getReportsFromDatabase, updateReportStatusDatabase, subscribeToReports } from '../utils/realtimeDb'
 import { getAllContractorsWithStats } from '../utils/contractorService'
 import PotholeCard from '../components/PotholeCard'
 import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet'
@@ -75,20 +75,15 @@ function Dashboard() {
     const [sortBy, setSortBy] = useState('newest') // newest, severe, topReporter, mostReported
 
     useEffect(() => {
-        loadReports()
-        loadContractors()
-    }, [])
-
-    const loadReports = async () => {
-        try {
-            const data = await getReportsFromDatabase()
+        setLoading(true)
+        // Real-time listener — updates dashboard instantly when Firebase changes
+        const unsubscribe = subscribeToReports((data) => {
             setReports(data)
-        } catch (error) {
-            console.error('Failed to load reports:', error)
-        } finally {
             setLoading(false)
-        }
-    }
+        })
+        loadContractors()
+        return () => unsubscribe() // Cleanup listener on unmount
+    }, [])
 
     const loadContractors = async () => {
         // Calculate real-time stats from reports

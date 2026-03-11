@@ -7,7 +7,8 @@ import {
     remove,
     query,
     orderByChild,
-    serverTimestamp
+    serverTimestamp,
+    onValue
 } from 'firebase/database'
 import { database } from './firebase'
 
@@ -251,4 +252,36 @@ export async function deleteReportFromDatabase(reportId) {
         console.error('Error deleting report:', error)
         throw error
     }
+}
+
+/**
+ * Subscribe to real-time updates on all reports
+ * Returns an unsubscribe function to clean up the listener
+ */
+export function subscribeToReports(callback) {
+    const reportsRef = ref(database, REPORTS_PATH)
+    const unsubscribe = onValue(reportsRef, (snapshot) => {
+        if (!snapshot.exists()) {
+            callback([])
+            return
+        }
+        const reports = []
+        snapshot.forEach((childSnapshot) => {
+            const data = childSnapshot.val()
+            reports.push({
+                id: childSnapshot.key,
+                ...data,
+                location: {
+                    lat: data.locationLat,
+                    lng: data.locationLng,
+                    address: data.locationAddress
+                },
+                createdAt: data.createdAt ? new Date(data.createdAt).toISOString() : new Date().toISOString()
+            })
+        })
+        callback(reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)))
+    }, (error) => {
+        console.error('Error subscribing to reports:', error)
+    })
+    return unsubscribe
 }
